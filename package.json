@@ -1,7 +1,7 @@
 {
   "name": "dsh-mood-wallpaper",
-  "version": "0.4.0",
-  "description": "DSH 壁纸感知动态壁纸引擎 v4：导入动态壁纸（GIF/视频）+ WebGL 实时着色器壁纸（极光/熔岩/星云，60fps 零依赖）；后台分析主色调/亮度/动态能量，状态机（idle/thinking/done）叠加自适应动效；敲击能量场、思维投影、会思考的代码雨、CRT、昼夜循环、鼠标视差/尾迹、键盘乐章、环境音。",
+  "version": "0.5.0",
+  "description": "DSH 壁纸感知动态壁纸引擎 v5：导入动态壁纸 + WebGL 着色器壁纸；后台分析；状态机 idle/thinking/done + 警报氛围层（错误红色脉冲/待命琥珀光）+ token 速率驱动粒子；敲击能量场、思维投影、代码雨、CRT、昼夜、视差尾迹、键盘乐章、环境音。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
