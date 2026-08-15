@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#04121f"/>
+      <stop offset="1" stop-color="#071a2e"/>
+    </linearGradient>
+    <linearGradient id="w1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0ea5e9" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#38bdf8" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#0ea5e9" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="w2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#818cf8" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#a5b4fc" stop-opacity="0.7"/>
+      <stop offset="1" stop-color="#818cf8" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="w3" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#67e8f9" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g filter="url(#glow)">
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0,0;1920,0" dur="26s" repeatCount="indefinite"/>
+      <path d="M-200 420 Q 160 340 520 420 T 1240 420 T 1960 420 T 2680 420" fill="none" stroke="url(#w1)" stroke-width="5" stroke-linecap="round">
+        <animate attributeName="opacity" values="0.8;1;0.8" dur="7s" repeatCount="indefinite"/>
+      </path>
+    </g>
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0,0;1920,0" dur="38s" repeatCount="indefinite"/>
+      <path d="M-200 620 Q 160 700 520 620 T 1240 620 T 1960 620 T 2680 620" fill="none" stroke="url(#w2)" stroke-width="4" stroke-linecap="round">
+        <animate attributeName="opacity" values="0.65;0.95;0.65" dur="9s" repeatCount="indefinite"/>
+      </path>
+    </g>
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0,0;1920,0" dur="50s" repeatCount="indefinite"/>
+      <path d="M-200 800 Q 160 740 520 800 T 1240 800 T 1960 800 T 2680 800" fill="none" stroke="url(#w3)" stroke-width="3.5" stroke-linecap="round">
+        <animate attributeName="opacity" values="0.55;0.9;0.55" dur="11s" repeatCount="indefinite"/>
+      </path>
+    </g>
+    <g>
+      <animateTransform attributeName="transform" type="translate" values="0,0;1920,0" dur="60s" repeatCount="indefinite"/>
+      <path d="M-200 940 Q 160 880 520 940 T 1240 940 T 1960 940 T 2680 940" fill="none" stroke="url(#w1)" stroke-width="2.5" stroke-linecap="round">
+        <animate attributeName="opacity" values="0.4;0.75;0.4" dur="13s" repeatCount="indefinite"/>
+      </path>
+    </g>
+  </g>
+  <g>
+    <circle cx="420" cy="240" r="1.6" fill="#bae6fd"><animate attributeName="opacity" values="0.2;0.8;0.2" dur="3.6s" repeatCount="indefinite"/></circle>
+    <circle cx="1120" cy="180" r="1.4" fill="#e0e7ff"><animate attributeName="opacity" values="0.15;0.7;0.15" dur="4.4s" repeatCount="indefinite"/></circle>
+    <circle cx="1580" cy="300" r="1.8" fill="#cffafe"><animate attributeName="opacity" values="0.2;0.85;0.2" dur="3.1s" repeatCount="indefinite"/></circle>
+    <circle cx="700" cy="1060" r="1.5" fill="#e0e7ff"><animate attributeName="opacity" values="0.15;0.65;0.15" dur="5s" repeatCount="indefinite"/></circle>
+  </g>
+</svg>
