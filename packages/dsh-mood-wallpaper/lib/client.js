@@ -72,7 +72,8 @@ window.__ModuleLoader__.load({
         alerts: true,
         whale: true,
         glass: false,
-        starmap: true
+        starmap: true,
+        fleet: true
       },
       analysis: {},
       /** 性能档位策略：auto（按平均 FPS 自动）| 60 | 30 | 15（手动锁定）。 */
@@ -1760,9 +1761,11 @@ window.__ModuleLoader__.load({
         }
         lastParticleRender = now;
 
-        // 记忆星图（独立画布，低档/减少动态时隐藏）
-        if (cfg.fx && cfg.fx.starmap && !reducedMotion && perf.tier !== "low") {
-          drawStarMap(now);
+        // 记忆星图 + 多 Agent 任务现场（独立画布，低档/减少动态时隐藏）
+        if (!reducedMotion && perf.tier !== "low" && cfg.fx && (cfg.fx.starmap || cfg.fx.fleet)) {
+          if (cfg.fx.starmap) drawStarMap(now);
+          else sctx.clearRect(0, 0, innerWidth, innerHeight);
+          if (cfg.fx.fleet) drawFleet(now);
         } else {
           sctx.clearRect(0, 0, innerWidth, innerHeight);
         }
@@ -2127,6 +2130,137 @@ window.__ModuleLoader__.load({
       starCanvas.addEventListener("click", onStarClick);
       disposables.push(() => { starCanvas.removeEventListener("click", onStarClick); closeStarPop(); });
 
+      // ================= 多 Agent 任务现场（后台任务态势可视化） =================
+      // 每个后台任务=一艘光点舰船：运行=沿轨道移动；工具调用=连接线；
+      // 等待批准=停靠变琥珀色；完成=返回中心淡出；失败=故障波纹。
+      const agentMap = new Map();
+
+      function agentStatus(s) {
+        const v = String(s || "").toLowerCase();
+        if (/(fail|error)/.test(v)) return "failed";
+        if (/(wait|pend|approv|block)/.test(v)) return "waiting";
+        if (/(run|active|work|exec)/.test(v)) return "running";
+        if (/(stop|done|complete|finish|success)/.test(v)) return "done";
+        return "running";
+      }
+
+      function buildAgentFleet() {
+        const seenActive = new Set();
+        let fallback = 0;
+        try {
+          const list = ctx.sessions.list.getSnapshot();
+          const bySession = list && list.jobsBySession;
+          if (bySession) {
+            for (const sid of Object.keys(bySession)) {
+              const arr = bySession[sid];
+              if (!Array.isArray(arr)) continue;
+              for (const j of arr) {
+                const id = j && (j.id || j.name || ("agent-" + (fallback++)));
+                const status = agentStatus(j && j.status);
+                if (status === "done") {
+                  const prev = agentMap.get(id);
+                  if (prev && prev.status !== "done") { prev.status = "done"; prev.fadeT0 = Date.now(); }
+                  continue;
+                }
+                seenActive.add(id);
+                const now = Date.now();
+                const prev = agentMap.get(id);
+                if (!prev) {
+                  agentMap.set(id, { id, sid, status, label: (j && (j.label || j.name)) || "Agent", since: now, angle: Math.random() * Math.PI * 2, x: null, y: null, glitchT0: status === "failed" ? now : 0, fadeT0: 0 });
+                } else {
+                  if (prev.status === "done") prev.fadeT0 = 0;
+                  prev.status = status;
+                  prev.label = (j && (j.label || j.name)) || prev.label;
+                  if (status === "failed" && !prev.glitchT0) prev.glitchT0 = now;
+                }
+              }
+            }
+          }
+        } catch { /* ignore */ }
+        const now = Date.now();
+        for (const [id, a] of agentMap) {
+          if (!seenActive.has(id) && a.status !== "done") { a.status = "done"; a.fadeT0 = now; }
+        }
+        for (const [id, a] of agentMap) {
+          if (a.status === "done" && now - a.fadeT0 > 3000) agentMap.delete(id);
+          else if (a.status === "failed" && now - a.glitchT0 > 5000 && !seenActive.has(id)) { a.status = "done"; a.fadeT0 = now; }
+        }
+        if (agentMap.size > 60) {
+          const it = agentMap.keys();
+          for (let i = 0; i < 30; i++) { const v = it.next(); if (v.done) break; agentMap.delete(v.value); }
+        }
+      }
+
+      function drawFleet(now) {
+        const t = now / 1000;
+        const cx = innerWidth * 0.5, cy = innerHeight * 0.42;
+        const baseR = Math.max(96, innerWidth * 0.17);
+        const entries = [...agentMap.values()];
+        if (entries.length === 0) return;
+        const accent = currentColors[1] || "#38bdf8";
+        const thinking = machineState === "thinking";
+        const running = entries.filter((a) => a.status === "running");
+        // 工具调用连接线：当前会话思考中 → 连线到运行中的 agent
+        if (thinking && running.length > 0) {
+          sctx.strokeStyle = "rgba(125,211,252,0.18)";
+          sctx.lineWidth = 1;
+          for (const a of running) {
+            if (a.x == null) continue;
+            sctx.beginPath();
+            sctx.moveTo(cx, cy);
+            sctx.lineTo(a.x, a.y);
+            sctx.stroke();
+          }
+        }
+        let i = 0;
+        for (const a of entries) {
+          const fade = a.status === "done" ? Math.max(0, 1 - (now - a.fadeT0) / 3000) : 1;
+          if (fade <= 0) continue;
+          if (a.status === "running") {
+            a.angle += 0.02;
+            const ring = baseR + (i % 3) * 46;
+            a.x = cx + Math.cos(a.angle) * ring;
+            a.y = cy + Math.sin(a.angle) * ring * 0.6;
+          } else if (a.status === "waiting") {
+            const ring = baseR * 0.42;
+            a.x = cx + Math.cos(a.angle) * ring;
+            a.y = cy + Math.sin(a.angle) * ring;
+          } else if (a.status === "failed") {
+            if (a.x == null) { a.x = cx + Math.cos(a.angle) * baseR; a.y = cy + Math.sin(a.angle) * baseR * 0.6; }
+          } else {
+            // done → 返回中心淡出
+            a.x = a.x == null ? cx + Math.cos(a.angle) * 20 : cx + (a.x - cx) * 0.9;
+            a.y = a.y == null ? cy + Math.sin(a.angle) * 14 : cy + (a.y - cy) * 0.9;
+          }
+          sctx.globalAlpha = fade * (a.status === "waiting" ? 0.75 + 0.25 * Math.sin(t * 3) : 0.9);
+          if (a.status === "failed") {
+            const jx = (Math.random() - 0.5) * 8;
+            const jy = (Math.random() - 0.5) * 8;
+            sctx.fillStyle = "rgba(239,68,68,0.95)";
+            sctx.beginPath(); sctx.arc(a.x + jx, a.y + jy, 4, 0, Math.PI * 2); sctx.fill();
+            sctx.strokeStyle = "rgba(239,68,68,0.55)";
+            sctx.lineWidth = 1.2;
+            sctx.beginPath(); sctx.arc(a.x + jx, a.y + jy, 6 + 5 * (0.5 + 0.5 * Math.sin(t * 6)), 0, Math.PI * 2); sctx.stroke();
+          } else if (a.status === "waiting") {
+            sctx.fillStyle = "rgba(245,158,11,0.95)";
+            sctx.beginPath(); sctx.arc(a.x, a.y, 3.6, 0, Math.PI * 2); sctx.fill();
+            sctx.strokeStyle = "rgba(245,158,11,0.5)";
+            sctx.lineWidth = 1;
+            sctx.beginPath(); sctx.arc(a.x, a.y, 7, 0, Math.PI * 2); sctx.stroke();
+          } else if (a.status === "done") {
+            sctx.fillStyle = hexToRgba(accent, 0.6);
+            sctx.beginPath(); sctx.arc(a.x, a.y, 2.6, 0, Math.PI * 2); sctx.fill();
+          } else {
+            sctx.fillStyle = hexToRgba(accent, 0.95);
+            sctx.beginPath(); sctx.arc(a.x, a.y, 3.2, 0, Math.PI * 2); sctx.fill();
+            sctx.fillStyle = hexToRgba(accent, 0.35);
+            sctx.beginPath(); sctx.arc(a.x, a.y, 7, 0, Math.PI * 2); sctx.fill();
+          }
+          i++;
+        }
+        sctx.globalAlpha = 1;
+      }
+
       // ================= 状态机：idle / thinking / done =================
       let machineState = "idle";
       let wasActive = false;
@@ -2224,6 +2358,7 @@ window.__ModuleLoader__.load({
         currentSession = null;
         let list = null;
         try { list = ctx.sessions.list.getSnapshot(); } catch { list = null; }
+        buildAgentFleet();
         const sid = list && list.current;
         if (!sid) { onSnapshot(null); return; }
         let binding = null;
@@ -2719,7 +2854,13 @@ window.__ModuleLoader__.load({
               checked: snap.fx.starmap,
               onChange: (e) => setFx("starmap", e.target.checked)
             }),
-            h("div", { className: "dswm-hint" }, "页面不可见时自动暂停全部动画/音频；系统开启「减少动态效果」时自动降级；性能低档时记忆星图自动隐藏。")
+            FxToggle({
+              label: "多 Agent 任务现场",
+              hint: "后台任务=光点舰船：运行沿轨道移动、等待批准停靠变琥珀、完成返回中心、失败故障波纹；HUD 显示精确数据",
+              checked: snap.fx.fleet,
+              onChange: (e) => setFx("fleet", e.target.checked)
+            }),
+            h("div", { className: "dswm-hint" }, "页面不可见时自动暂停全部动画/音频；系统开启「减少动态效果」时自动降级；性能低档时记忆星图/任务现场自动隐藏。")
           ]),
 
           h("div", { className: "dswm-card" }, [

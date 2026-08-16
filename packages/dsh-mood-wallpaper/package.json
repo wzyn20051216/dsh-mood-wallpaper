@@ -1,7 +1,7 @@
 {
   "name": "dsh-mood-wallpaper",
-  "version": "0.11.0",
-  "description": "DSH 壁纸感知动态壁纸引擎 v11.0（monorepo 版）：场景编排器 Scene Studio（可视化编排 + 状态预览 + scene.json 导入导出 + 跨插件应用）、记忆星图、自适应性能档位（FPS 60/30/15 分档 + 电池降分辨率 + 压力减特效 + WebGL 恢复 + 开销展示）、场景皮肤、玻璃材质、鲸鱼伙伴化、自定义文件夹壁纸、WebGL 着色器、状态机 + 警报氛围 + 极简模式。",
+  "version": "0.12.0",
+  "description": "DSH 壁纸感知动态壁纸引擎 v12.0（monorepo 版）：多 Agent 任务现场（后台任务光点舰船态势）、场景编排器 Scene Studio、记忆星图、自适应性能档位（FPS 60/30/15 分档 + 电池降分辨率 + 压力减特效 + WebGL 恢复 + 开销展示）、场景皮肤、玻璃材质、鲸鱼伙伴化、自定义文件夹壁纸、WebGL 着色器、状态机 + 警报氛围 + 极简模式。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
