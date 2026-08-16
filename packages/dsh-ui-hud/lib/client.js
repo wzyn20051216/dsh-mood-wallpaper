@@ -997,6 +997,16 @@ window.__ModuleLoader__.load({
       window.addEventListener("dsh:minimal", onMinimalEvent);
       disposables.push(() => window.removeEventListener("dsh:minimal", onMinimalEvent));
 
+      // Scene Studio 场景应用：同步 HUD 布局（状态栏/记忆抽屉开关）
+      function onSceneEvent(e) {
+        const d = e && e.detail;
+        if (d && d.hud && typeof d.hud === "object") {
+          applyConfig({ hud: !!d.hud.hud, memory: !!d.hud.memory });
+        }
+      }
+      window.addEventListener("dsh:scene", onSceneEvent);
+      disposables.push(() => window.removeEventListener("dsh:scene", onSceneEvent));
+
       // ================= 设置页 UI =================
       function SettingsView() {
         const [snap, setSnap] = React.useState(store.get());

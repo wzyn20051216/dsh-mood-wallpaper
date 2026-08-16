@@ -502,6 +502,19 @@ window.__ModuleLoader__.load({
       window.addEventListener("dsh:minimal", onMinimalEvent);
       disposables.push(() => window.removeEventListener("dsh:minimal", onMinimalEvent));
 
+      // Scene Studio 场景应用：同步桌宠形象（内置 id 或 "none" 隐藏）
+      function onSceneEvent(e) {
+        const d = e && e.detail;
+        if (!d) return;
+        if (d.pet === "none") {
+          applyConfig({ visible: false });
+        } else if (d.pet && BUILTIN_PETS[d.pet]) {
+          applyConfig({ petId: d.pet, visible: true });
+        }
+      }
+      window.addEventListener("dsh:scene", onSceneEvent);
+      disposables.push(() => window.removeEventListener("dsh:scene", onSceneEvent));
+
       function applyConfig(patch) {
         Object.assign(cfg, patch);
         saveConfig();

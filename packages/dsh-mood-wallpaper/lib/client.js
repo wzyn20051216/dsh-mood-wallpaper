@@ -76,7 +76,11 @@ window.__ModuleLoader__.load({
       },
       analysis: {},
       /** 性能档位策略：auto（按平均 FPS 自动）| 60 | 30 | 15（手动锁定）。 */
-      perfMode: "auto"
+      perfMode: "auto",
+      /** 粒子密度倍率（Scene Studio 编排用）。 */
+      particleDensity: 1,
+      /** 壁纸/状态转场时长 ms（Scene Studio 编排用）。 */
+      transitionMs: 500
     };
 
     /** 手动风格预设（style != auto 时覆盖分析结果）。 */
@@ -219,7 +223,9 @@ window.__ModuleLoader__.load({
         analysisInfo: null,
         importing: false,
         error: null,
-        perf: null
+        perf: null,
+        scenePreview: null,
+        sceneName: null
       }, cfg);
       const store = {
         get: () => state,
@@ -841,6 +847,9 @@ window.__ModuleLoader__.load({
         const i = Math.max(0.2, Number(cfg.intensity) || 1);
         setVar("--dswm-kb2", (11 / i).toFixed(2) + "s");
         setVar("--dswm-sweep-dur", (7 / i).toFixed(2) + "s");
+        // 转场时长（Scene Studio）：壁纸层淡入淡出速度
+        const trans = Math.max(120, Number(cfg.transitionMs) || 500);
+        wallEl.style.transition = "opacity " + (trans / 1000).toFixed(2) + "s ease";
         wallEl.setAttribute("data-kenburns", (cfg.kenburns && !perf.reduce) ? "1" : "0");
         wallEl.setAttribute("data-crt", cfg.fx && cfg.fx.crt ? "1" : "0");
         wallEl.setAttribute("data-daynight", cfg.fx && cfg.fx.daynight ? "1" : "0");
@@ -1776,9 +1785,10 @@ window.__ModuleLoader__.load({
 
         // token 速率驱动：思考时粒子密度随真实流速自适应（上限 2x）
         const rateBoost = engineState === "thinking" ? 1 + Math.min(1, tokenRate / 40) : 1;
+        const density = Math.max(0.2, Number(cfg.particleDensity) || 1);
         const target = engineState === "thinking"
-          ? Math.round(24 * cfg.intensity * rateBoost)
-          : engineState === "done" ? 8 : 12;
+          ? Math.round(24 * cfg.intensity * rateBoost * density)
+          : engineState === "done" ? Math.round(8 * density) : Math.round(12 * density);
         let ambient = 0;
         for (const p of particles) if (!p.burst && !p.spark && !p.ring) ambient++;
         if (ambient < target) spawnAmbient(target - ambient);
@@ -2121,6 +2131,9 @@ window.__ModuleLoader__.load({
       let machineState = "idle";
       let wasActive = false;
       let doneTimer = null;
+      let lastSnap = null;
+      let previewUntil = 0;
+      let previewTimer = null;
 
       function isActive(snap) {
         if (!snap) return false;
@@ -2146,19 +2159,38 @@ window.__ModuleLoader__.load({
         }
       }
 
+      // Scene Studio 状态预览：临时强制一个状态（4s 后恢复实时）
+      function previewState(state, alert) {
+        previewUntil = Date.now() + 4000;
+        setMachine(state);
+        setAlert(alert);
+        if (state === "thinking") {
+          if (cfg.fx && cfg.fx.thought) { spawnToolNode("tool"); spawnToolNode("read"); spawnToolNode("write"); }
+        }
+        if (previewTimer) clearTimeout(previewTimer);
+        previewTimer = setTimeout(() => {
+          previewTimer = null;
+          previewUntil = 0;
+          onSnapshot(lastSnap); // 恢复实时状态机
+        }, 4000);
+      }
+
       function onSnapshot(snap) {
-        evaluateAlert(snap);
+        lastSnap = snap;
+        const inPreview = Date.now() < previewUntil;
         // 实时性能治理输入：上下文压力 + 并发工具调用数
         perf.pressure = readPressure();
         perf.toolLoad = snap && snap.runningCalls ? snap.runningCalls.length : 0;
         applyPerf();
         buildMemoryGraph(snap);
+        const active = isActive(snap);
+        if (inPreview) { wasActive = active; return; } // 预览模式：冻结状态机 + 警报
+        evaluateAlert(snap);
         if (!cfg.enabled) {
           setMachine("idle");
-          wasActive = isActive(snap);
+          wasActive = active;
           return;
         }
-        const active = isActive(snap);
         if (active) {
           feedTokens(snap);
           syncTools(snap);
@@ -2245,6 +2277,123 @@ window.__ModuleLoader__.load({
       }
 
       applyStyle();
+
+      // ================= 场景编排器 Scene Studio（scene.json 创作平台） =================
+      const SCENES_KEY = "dsh-mood-wallpaper.scenes";
+      const SCENE_SCHEMA = "dsh-scene/v1";
+      const PET_OPTIONS = [
+        { value: "whale", label: "🐋 鲸鱼" },
+        { value: "cat", label: "🐱 招财猫" },
+        { value: "penguin", label: "🐧 企鹅" },
+        { value: "ghost", label: "👻 小幽灵" },
+        { value: "dino", label: "🦖 小恐龙" },
+        { value: "none", label: "🚫 无桌宠" }
+      ];
+      const FX_NAMES = [
+        ["keyboard", "敲击能量场"], ["thought", "思维投影"], ["coderain", "代码雨"],
+        ["trail", "鼠标尾迹"], ["parallax", "鼠标视差"], ["daynight", "昼夜循环"],
+        ["crt", "CRT 美学"], ["glass", "玻璃材质"], ["whale", "鲸鱼巡游"],
+        ["alerts", "警报氛围"], ["sound", "环境音"], ["keysound", "键盘乐章"], ["starmap", "记忆星图"]
+      ];
+
+      function normalizeScene(s) {
+        return Object.assign({}, s, {
+          fx: Object.assign({}, DEFAULTS.fx, s.fx && typeof s.fx === "object" ? s.fx : {}),
+          hud: Object.assign({ hud: true, memory: true }, s.hud && typeof s.hud === "object" ? s.hud : {}),
+          pet: s.pet || "whale"
+        });
+      }
+      function loadScenes() {
+        try {
+          const raw = localStorage.getItem(SCENES_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          if (!Array.isArray(arr)) return [];
+          return arr.filter((s) => s && typeof s === "object").map(normalizeScene);
+        } catch {
+          return [];
+        }
+      }
+      function persistScenes(list) {
+        try { localStorage.setItem(SCENES_KEY, JSON.stringify(list.slice(0, 50))); } catch { /* ignore */ }
+      }
+
+      function currentScene(name) {
+        return {
+          schema: SCENE_SCHEMA,
+          name: name || "未命名场景",
+          wallpaper: cfg.wallpaperId || "shader-abyss",
+          style: cfg.style || "auto",
+          intensity: Number(cfg.intensity) || 1,
+          particleDensity: Number(cfg.particleDensity) || 1,
+          transitionMs: Number(cfg.transitionMs) || 500,
+          baseAlpha: cfg.baseAlpha,
+          panelAlpha: cfg.panelAlpha,
+          kenburns: !!cfg.kenburns,
+          doneFx: !!cfg.doneFx,
+          fx: Object.assign({}, cfg.fx),
+          pet: "whale",
+          hud: { hud: true, memory: true }
+        };
+      }
+
+      function applyScene(scene) {
+        if (!scene || typeof scene !== "object") return false;
+        const fx = Object.assign({}, cfg.fx, scene.fx && typeof scene.fx === "object" ? scene.fx : {});
+        applyConfig({
+          style: scene.style || "auto",
+          intensity: Number(scene.intensity) || 1,
+          particleDensity: Number(scene.particleDensity) || 1,
+          transitionMs: Number(scene.transitionMs) || 500,
+          baseAlpha: Number(scene.baseAlpha) || 70,
+          panelAlpha: Number(scene.panelAlpha) || 85,
+          kenburns: !!scene.kenburns,
+          doneFx: !!scene.doneFx,
+          fx
+        });
+        if (scene.wallpaper) applyConfig({ wallpaperId: scene.wallpaper });
+        store.set({ sceneName: scene.name || "导入场景" });
+        // 跨插件：桌宠形象 + HUD 布局
+        try {
+          window.dispatchEvent(new CustomEvent("dsh:scene", {
+            detail: {
+              pet: scene.pet || "whale",
+              hud: scene.hud && typeof scene.hud === "object" ? scene.hud : null
+            }
+          }));
+        } catch { /* ignore */ }
+        return true;
+      }
+
+      function exportScene(scene) {
+        try {
+          const blob = new Blob([JSON.stringify(scene, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = (scene.name || "scene").replace(/[^\w\u4e00-\u9fa5-]+/g, "_") + ".scene.json";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+          store.set({ error: "导出失败：" + String((e && e.message) || e) });
+        }
+      }
+
+      function importSceneText(text) {
+        try {
+          const parsed = JSON.parse(text);
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("不是有效 JSON 对象");
+          const scene = normalizeScene(parsed);
+          if (!applyScene(scene)) throw new Error("场景字段无效");
+          const list = loadScenes().filter((s) => s.name !== scene.name).concat([scene]);
+          persistScenes(list);
+          return true;
+        } catch (e) {
+          store.set({ error: "导入失败：" + String((e && e.message) || e) });
+          return false;
+        }
+      }
 
       // ================= 设置页 UI =================
       function FxToggle({ label, hint, checked, onChange }) {
@@ -2606,6 +2755,176 @@ window.__ModuleLoader__.load({
         { name: "settings.section", id: "mood-wallpaper", order: 30, label: "状态壁纸 · Mood" },
         () => h("div", { className: "dswm-page" }, h(SettingsView))
       )), "dsh-mood-wallpaper: settings section");
+
+      // ================= 场景编排器 Scene Studio（设置页） =================
+      function SceneStudioView() {
+        const [snap, setSnap] = React.useState(store.get());
+        React.useEffect(() => store.subscribe(setSnap), []);
+        const [draft, setDraft] = React.useState(() => currentScene(""));
+        const [scenes, setScenes] = React.useState(loadScenes());
+        const fileRef = React.useRef(null);
+
+        const all = snap.users.concat(snap.folder).concat(snap.builtins);
+        const set = (patch) => setDraft(Object.assign({}, draft, patch));
+        const setFx = (key, value) => set({ fx: Object.assign({}, draft.fx, { [key]: value }) });
+
+        function onImport(e) {
+          const file = e.target.files && e.target.files[0];
+          e.target.value = "";
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            if (importSceneText(String(reader.result || ""))) {
+              const list = loadScenes();
+              setScenes(list);
+              setDraft(list[list.length - 1]);
+            }
+          };
+          reader.readAsText(file);
+        }
+
+        const label = (t) => h("span", { className: "dswm-label" }, t);
+        const sliderRow = (t, field, min, max, step, fmt) => h("div", { className: "dswm-row" }, [
+          label(t),
+          h("input", {
+            className: "dswm-slider", type: "range", min, max, step,
+            value: draft[field],
+            onChange: (e) => set({ [field]: Number(e.target.value) })
+          }),
+          h("span", { className: "dswm-hint dswm-num" }, fmt(draft[field]))
+        ]);
+        const switchRow = (t, field, hint2) => h("div", { className: "dswm-row" }, [
+          label(t),
+          h("label", { className: "dswm-switch" }, [
+            h("input", { type: "checkbox", checked: !!draft[field], onChange: (e) => set({ [field]: e.target.checked }) }),
+            h("span", { className: "dswm-track" }),
+            h("span", { className: "dswm-thumb" })
+          ]),
+          h("span", { className: "dswm-hint" }, hint2)
+        ]);
+
+        return h("div", { className: "dswm-page" }, [
+          h("div", { className: "dswm-card" }, [
+            h("div", { className: "dswm-row" }, [
+              h("div", { className: "dswm-grow" }, [
+                h("div", { className: "dswm-title" }, "场景编排器 · Scene Studio"),
+                h("div", { className: "dswm-hint" }, "可视化编排壁纸 + 着色器 + 桌宠 + 音效 + HUD 布局，导出 scene.json 一键分享")
+              ]),
+              h("input", { ref: fileRef, type: "file", accept: ".json,application/json", style: { display: "none" }, onChange: onImport }),
+              h("button", { className: "dswm-btn dswm-btn-primary", onClick: () => fileRef.current && fileRef.current.click() }, "📥 导入场景")
+            ]),
+            h("div", { className: "dswm-row" }, [
+              label("场景名"),
+              h("input", { className: "dswm-input dswm-grow", value: draft.name, spellCheck: false, placeholder: "给场景起个名字", onChange: (e) => set({ name: e.target.value }) })
+            ]),
+            h("div", { className: "dswm-row" }, [
+              h("button", { className: "dswm-btn dswm-btn-primary", onClick: () => applyScene(draft) }, "▶ 应用场景"),
+              h("button", { className: "dswm-btn", onClick: () => exportScene(draft) }, "📤 导出 scene.json"),
+              h("button", {
+                className: "dswm-btn",
+                onClick: () => {
+                  const name = (draft.name || "未命名").trim();
+                  const list = loadScenes().filter((s) => s.name !== name).concat([draft]);
+                  persistScenes(list);
+                  setScenes(list);
+                  store.set({ sceneName: name });
+                }
+              }, "💾 保存到本地")
+            ])
+          ]),
+
+          h("div", { className: "dswm-card" }, [
+            h("div", { className: "dswm-title" }, "状态预览 · State Preview"),
+            h("div", { className: "dswm-row", style: { flexWrap: "wrap", gap: "8px" } },
+              [["idle", "空闲", null], ["thinking", "思考", null], ["tool", "工具", null], ["approval", "待批准", "pending"], ["error", "错误", "error"], ["done", "完成", null]]
+                .map(([key, lb, alert]) => h("button", {
+                  className: "dswm-btn" + (snap.scenePreview === key ? " dswm-btn-primary" : ""),
+                  onClick: () => {
+                    store.set({ scenePreview: key });
+                    if (key === "tool") previewState("thinking", null);
+                    else if (key === "approval") previewState("idle", "pending");
+                    else if (key === "error") previewState("idle", "error");
+                    else previewState(key, null);
+                  }
+                }, lb)))
+          ]),
+
+          h("div", { className: "dswm-card" }, [
+            h("div", { className: "dswm-title" }, "壁纸 / 风格 / 桌宠 / HUD"),
+            h("div", { className: "dswm-row" }, [
+              label("壁纸"),
+              h("select", { className: "dswm-select dswm-grow", value: draft.wallpaper || "", onChange: (e) => set({ wallpaper: e.target.value }) }, [
+                h("option", { value: "" }, "（不改变）"),
+                ...all.map((w) => h("option", { value: w.id }, (w.kind === "shader" ? "⚡ " : "") + w.name))
+              ])
+            ]),
+            h("div", { className: "dswm-row" }, [
+              label("叠加风格"),
+              h("select", { className: "dswm-select dswm-grow", value: draft.style || "auto", onChange: (e) => set({ style: e.target.value }) }, [
+                h("option", { value: "auto" }, "自动（随壁纸分析）"),
+                ...Object.keys(PRESETS).map((k) => h("option", { value: k }, PRESETS[k].label))
+              ])
+            ]),
+            h("div", { className: "dswm-row" }, [
+              label("桌宠形象"),
+              h("select", { className: "dswm-select dswm-grow", value: draft.pet || "whale", onChange: (e) => set({ pet: e.target.value }) },
+                PET_OPTIONS.map((p) => h("option", { value: p.value }, p.label)))
+            ]),
+            h("div", { className: "dswm-row" }, [
+              label("HUD 状态栏"),
+              h("label", { className: "dswm-switch" }, [
+                h("input", { type: "checkbox", checked: draft.hud.hud, onChange: (e) => set({ hud: Object.assign({}, draft.hud, { hud: e.target.checked }) }) }),
+                h("span", { className: "dswm-track" }), h("span", { className: "dswm-thumb" })
+              ]),
+              label("记忆抽屉"),
+              h("label", { className: "dswm-switch" }, [
+                h("input", { type: "checkbox", checked: draft.hud.memory, onChange: (e) => set({ hud: Object.assign({}, draft.hud, { memory: e.target.checked }) }) }),
+                h("span", { className: "dswm-track" }), h("span", { className: "dswm-thumb" })
+              ])
+            ])
+          ]),
+
+          h("div", { className: "dswm-card" }, [
+            h("div", { className: "dswm-title" }, "转场 / 粒子 / 通透度"),
+            sliderRow("动效强度", "intensity", 0.6, 1.6, 0.2, (v) => v + "×"),
+            sliderRow("粒子密度", "particleDensity", 0.2, 2, 0.1, (v) => v + "×"),
+            sliderRow("转场时长", "transitionMs", 200, 1500, 50, (v) => v + "ms"),
+            sliderRow("背景透明度", "baseAlpha", 0, 100, 5, (v) => v + "%"),
+            sliderRow("面板透明度", "panelAlpha", 0, 100, 5, (v) => v + "%"),
+            switchRow("Ken Burns", "kenburns", "壁纸缓慢缩放平移"),
+            switchRow("完成动效", "doneFx", "思考结束光环+粒子爆散")
+          ]),
+
+          h("div", { className: "dswm-card" }, [
+            h("div", { className: "dswm-title" }, "特效组合 · Effects"),
+            h("div", { className: "dswm-row", style: { flexWrap: "wrap", gap: "8px" } },
+              FX_NAMES.map(([key, lb]) => {
+                const on = draft.fx && draft.fx[key];
+                return h("button", {
+                  className: "dswm-btn" + (on ? " dswm-btn-primary" : ""),
+                  onClick: () => setFx(key, !on)
+                }, (on ? "✓ " : "") + lb);
+              }))
+          ]),
+
+          h("div", { className: "dswm-card" }, [
+            h("div", { className: "dswm-title" }, "已保存场景 · Saved Scenes"),
+            scenes.length === 0
+              ? h("div", { className: "dswm-hint" }, "还没有保存的场景。编排好后点「保存到本地」或「导出 scene.json」分享。")
+              : h("div", { className: "dswm-row", style: { flexWrap: "wrap", gap: "8px" } },
+                  scenes.map((s) => h("button", {
+                    className: "dswm-btn" + (draft.name === s.name ? " dswm-btn-primary" : ""),
+                    onClick: () => { setDraft(Object.assign({}, s)); applyScene(s); }
+                  }, s.name))),
+            h("div", { className: "dswm-hint" }, "scene.json 可一键导入他人分享的场景包；应用时跨插件同步桌宠形象与 HUD 布局。")
+          ])
+        ]);
+      }
+
+      ctx.effect(() => ctx.slots.inject("settings.section", () => ctx.slots.register(
+        { name: "settings.section", id: "scene-studio", order: 33, label: "场景编排器 · Scene Studio" },
+        () => h("div", { className: "dswm-page" }, h(SceneStudioView))
+      )), "dsh-mood-wallpaper: scene studio section");
 
       // ================= 启动 =================
       loadWallpapers();
