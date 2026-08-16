@@ -3,8 +3,8 @@
 # 用法（一行）：
 #   irm https://raw.githubusercontent.com/wzyn20051216/dsh-mood-wallpaper/master/install.ps1 | iex
 #
-# 作用：把全家桶两个插件（壁纸引擎 + 状态 HUD/记忆中心）以 GitHub 直装方式
-#       装进你的 DSH web profile，无需 npm。
+# 作用：克隆全家桶仓库，把两个插件（壁纸引擎 + 状态 HUD/记忆中心）以本地目录
+#       方式装进你的 DSH web profile（link: 安装，改源码重启即生效），无需 npm。
 # 要求：已安装 DSH（dsh 命令可用）、git、网络可达 GitHub。
 
 param(
@@ -13,11 +13,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$REPO = "github:wzyn20051216/dsh-mood-wallpaper"
-$PLUGINS = @(
-    "$REPO#path=packages/dsh-mood-wallpaper",
-    "$REPO#path=packages/dsh-ui-hud"
-)
+$REPO_URL = "https://github.com/wzyn20051216/dsh-mood-wallpaper.git"
+$TMP = Join-Path $env:TEMP "dsh-mood-wallpaper-all"
 
 Write-Host "=== dsh-mood-wallpaper 全家桶 一键安装 ===" -ForegroundColor Cyan
 
@@ -28,18 +25,32 @@ if (-not $dshCmd) {
     Write-Host "  npm i -g dsh" -ForegroundColor Yellow
     exit 1
 }
-Write-Host "[1/3] dsh 可用: $($dshCmd.Source)"
+Write-Host "[1/4] dsh 可用: $($dshCmd.Source)"
 
-# 2) GitHub 直装两个插件（无构建脚本，无需 pnpm allowBuilds）
-Write-Host "[2/3] 安装插件到 profile '$ProfileName' ..." -ForegroundColor Cyan
-dsh plugin --profile $ProfileName add $PLUGINS
+# 2) 检查 git
+if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+    Write-Host "[错误] 未找到 git，请先安装：https://git-scm.com/" -ForegroundColor Red
+    exit 1
+}
+
+# 3) 克隆仓库（浅克隆）
+if (Test-Path $TMP) { Remove-Item $TMP -Recurse -Force }
+Write-Host "[2/4] 克隆仓库到 $TMP ..." -ForegroundColor Cyan
+git clone --depth 1 $REPO_URL $TMP
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "[错误] 克隆失败" -ForegroundColor Red
+    exit 1
+}
+
+# 4) 安装两个插件（本地目录 link:）
+Write-Host "[3/4] 安装插件到 profile '$ProfileName' ..." -ForegroundColor Cyan
+dsh plugin --profile $ProfileName add "$TMP\packages\dsh-mood-wallpaper" "$TMP\packages\dsh-ui-hud"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[错误] 插件安装失败，退出码 $LASTEXITCODE" -ForegroundColor Red
     exit 1
 }
 
-# 3) 提示重启
-Write-Host "[3/3] 安装完成！" -ForegroundColor Green
+Write-Host "[4/4] 安装完成！" -ForegroundColor Green
 Write-Host ""
 Write-Host "下一步：重启 dsh web 使插件生效：" -ForegroundColor Yellow
 Write-Host "  1) 停掉正在运行的 dsh web（Ctrl+C）"
@@ -49,3 +60,5 @@ Write-Host ""
 Write-Host "卸载：" -ForegroundColor Gray
 Write-Host "  dsh plugin --profile $ProfileName remove dsh-mood-wallpaper"
 Write-Host "  dsh plugin --profile $ProfileName remove dsh-ui-hud"
+Write-Host ""
+Write-Host "升级：重新运行本脚本（会重新克隆并覆盖 link 指向的目录）。"

@@ -39,12 +39,13 @@ dsh-mood-wallpaper/                    # 全家桶仓库（monorepo）
 ## 🚀 安装（一条命令装两个）
 
 ```powershell
-# 一键脚本（推荐）
+# 一键脚本（推荐）：克隆仓库 + 装两个插件（link: 安装，改源码重启即生效）
 irm https://raw.githubusercontent.com/wzyn20051216/dsh-mood-wallpaper/master/install.ps1 | iex
 
-# 或手动 GitHub 直装（monorepo 子包语法，无需 npm）
-dsh plugin --profile web add "github:wzyn20051216/dsh-mood-wallpaper#path=packages/dsh-mood-wallpaper"
-dsh plugin --profile web add "github:wzyn20051216/dsh-mood-wallpaper#path=packages/dsh-ui-hud"
+# 或手动（等价的四条命令）
+git clone --depth 1 https://github.com/wzyn20051216/dsh-mood-wallpaper $env:TEMP\dsh-mood-wallpaper-all
+dsh plugin --profile web add "$env:TEMP\dsh-mood-wallpaper-all\packages\dsh-mood-wallpaper"
+dsh plugin --profile web add "$env:TEMP\dsh-mood-wallpaper-all\packages\dsh-ui-hud"
 ```
 
 安装后**重启 `dsh web`** 生效。卸载：
@@ -54,7 +55,7 @@ dsh plugin --profile web remove dsh-mood-wallpaper
 dsh plugin --profile web remove dsh-ui-hud
 ```
 
-> 也可只装其中一个（单独一条命令）。想本地开发：`dsh plugin --profile web add <本仓库>/packages/<包名>`。
+> 无需 npm；`link:` 安装意味着升级 = 重新跑一遍脚本（或 `git -C $env:TEMP\dsh-mood-wallpaper-all pull` 后重启）。
 
 ---
 
