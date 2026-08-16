@@ -264,6 +264,66 @@ window.__ModuleLoader__.load({
         .dshhud-switch input:focus-visible ~ .dshhud-track { box-shadow: 0 0 0 2px var(--dsw-alias-brand-primary); }
         .dshhud-bar-wrap > i { background: var(--dshhud-accent, var(--dsw-alias-brand-primary, #4f83f2)); }
         .dshhud-accent-glow { box-shadow: 0 0 0 1px var(--dshhud-accent, transparent), 0 0 12px var(--dshhud-accent, transparent); }
+
+        /* ---- Composer 模型选择器 + 推理强度变阻器 ---- */
+        .dshhud-models { position: relative; display: inline-flex; align-items: center; }
+        .dshhud-model-trigger {
+          box-sizing: border-box; height: 28px; max-width: 200px; padding: 0 10px; cursor: pointer;
+          display: inline-flex; align-items: center; gap: 6px;
+          background: var(--dsw-alias-bg-layer-2, #1f222b); color: var(--dsw-alias-label-primary, #e5e7eb);
+          border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.08)); border-radius: 8px;
+          font-size: 13px; line-height: 20px; transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .dshhud-model-trigger:hover { border-color: var(--dsw-alias-border-l2); }
+        .dshhud-model-trigger .dshhud-model-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .dshhud-model-trigger .dshhud-model-effort { flex: none; color: var(--dsw-alias-label-caption, #9ca3af); font-size: 11px; }
+
+        .dshhud-model-pop {
+          position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 9600; width: 250px;
+          padding: 8px; border-radius: 12px;
+          background: color-mix(in srgb, var(--dsw-alias-bg-layer-2, #1f222b) 96%, transparent);
+          border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.12));
+          box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+          display: flex; flex-direction: column; gap: 6px; max-height: min(400px, 60vh); overflow: auto;
+        }
+        .dshhud-model-provider { font-size: 11px; color: var(--dsw-alias-label-tertiary, #6b7280); padding: 6px 8px 2px; }
+        .dshhud-model-item {
+          box-sizing: border-box; width: 100%; padding: 7px 8px; cursor: pointer; text-align: left;
+          background: transparent; color: var(--dsw-alias-label-primary, #e5e7eb);
+          border: 0; border-radius: 8px; font-size: 13px; line-height: 18px;
+        }
+        .dshhud-model-item:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(255,255,255,0.06)); }
+        .dshhud-model-item.dshhud-sel { background: var(--dsw-alias-brand-primary); color: #fff; }
+
+        .dshhud-rheostat { padding: 10px 4px 4px; border-top: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.08)); }
+        .dshhud-rheostat-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; }
+        .dshhud-rheostat-title { font-size: 12px; color: var(--dsw-alias-label-secondary, #9ca3af); }
+        .dshhud-rheostat-val { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary, #e5e7eb); }
+        .dshhud-rheostat-track {
+          position: relative; height: 24px; cursor: ew-resize; touch-action: none; user-select: none;
+          border-radius: 12px; background: var(--dsw-alias-bg-layer-3, #14161d);
+          border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.08)); overflow: hidden;
+        }
+        .dshhud-rheostat-fill {
+          position: absolute; left: 0; top: 0; bottom: 0;
+          background: linear-gradient(90deg, rgba(79,131,242,0.2), var(--dshhud-accent, #4f83f2));
+          box-shadow: 0 0 12px var(--dshhud-accent, rgba(79,131,242,0.6));
+          transition: width 90ms ease;
+        }
+        .dshhud-rheostat-ticks { position: absolute; inset: 0; pointer-events: none; }
+        .dshhud-rheostat-ticks i { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.1); }
+        .dshhud-rheostat-knob {
+          position: absolute; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%;
+          background: #fff; border: 2px solid var(--dshhud-accent, #4f83f2);
+          box-shadow: 0 0 0 4px rgba(79,131,242,0.16), 0 2px 6px rgba(0,0,0,0.4);
+          transform: translateX(-50%); transition: left 90ms ease; pointer-events: none;
+        }
+        .dshhud-rheostat-knob::after {
+          content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
+          border-radius: 50%; background: var(--dshhud-accent, #4f83f2);
+        }
+        .dshhud-rheostat-stops { display: flex; justify-content: space-between; padding: 4px 2px 0; }
+        .dshhud-rheostat-stops span { font-size: 10px; color: var(--dsw-alias-label-caption, #9ca3af); }
       `;
 
       // ================= HUD / 抽屉 DOM =================
@@ -1054,6 +1114,141 @@ window.__ModuleLoader__.load({
         { name: "settings.section", id: "ui-hud", order: 40, label: "状态 HUD · Memory" },
         () => h("div", { className: "dshhud-page" }, h(SettingsView))
       )), "dsh-ui-hud: settings section");
+
+      // ================= Composer 模型选择器 + 推理强度变阻器 =================
+      function findModel(groups, selection) {
+        if (!selection || !Array.isArray(groups)) return null;
+        for (const g of groups) {
+          if (g.id !== selection.provider) continue;
+          for (const m of g.models) if (m.id === selection.model) return m;
+        }
+        return null;
+      }
+      function effortIndexOf(efforts, id) {
+        const i = efforts.findIndex((e) => e.id === id);
+        return i >= 0 ? i : 0;
+      }
+
+      function ModelRheostat({ efforts, current, select }) {
+        const n = efforts.length;
+        const [val, setVal] = React.useState(() => effortIndexOf(efforts, current && current.reasoningEffort));
+        const trackRef = React.useRef(null);
+        const lastIdx = React.useRef(val);
+        React.useEffect(() => {
+          const i = effortIndexOf(efforts, current && current.reasoningEffort);
+          setVal(i);
+          lastIdx.current = i;
+        }, [current && current.reasoningEffort, efforts]);
+
+        function applyFromClientX(clientX) {
+          const el = trackRef.current;
+          if (!el || n < 2) return;
+          const r = el.getBoundingClientRect();
+          const t = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+          const i = Math.max(0, Math.min(n - 1, Math.round(t * (n - 1))));
+          setVal(i);
+          if (i !== lastIdx.current) {
+            lastIdx.current = i;
+            const eff = efforts[i];
+            if (eff) {
+              if (eff.id !== (current && current.reasoningEffort)) select(eff.id);
+              // 壁纸联动：推理强度 → 壁纸能量（交互反馈）
+              try {
+                window.dispatchEvent(new CustomEvent("dsh:mood:energy", {
+                  detail: { intensity: 0.6 + (i / Math.max(1, n - 1)) * 1.4 }
+                }));
+              } catch { /* ignore */ }
+            }
+          }
+        }
+        function onDown(e) {
+          e.preventDefault();
+          applyFromClientX(e.clientX);
+          const move = (ev) => applyFromClientX(ev.clientX);
+          const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        }
+
+        const pct = n > 1 ? (val / (n - 1)) * 100 : 0;
+        const ticks = [];
+        for (let i = 0; i < n; i++) ticks.push(h("i", { key: i, style: { left: (n > 1 ? (i / (n - 1)) * 100 : 50) + "%" } }));
+
+        return h("div", { className: "dshhud-rheostat" }, [
+          h("div", { className: "dshhud-rheostat-head" }, [
+            h("span", { className: "dshhud-rheostat-title" }, "推理强度"),
+            h("span", { className: "dshhud-rheostat-val" }, (efforts[val] && efforts[val].name) || "默认")
+          ]),
+          h("div", { className: "dshhud-rheostat-track", ref: trackRef, onPointerDown: onDown }, [
+            h("div", { className: "dshhud-rheostat-fill", style: { width: pct + "%" } }),
+            h("div", { className: "dshhud-rheostat-ticks" }, ticks),
+            h("div", { className: "dshhud-rheostat-knob", style: { left: pct + "%" } })
+          ]),
+          n > 1 ? h("div", { className: "dshhud-rheostat-stops" }, efforts.map((e) => h("span", { key: e.id }, e.name))) : null
+        ]);
+      }
+
+      function ComposerModelControl() {
+        const md = ctx.get("modelDirectories");
+        const [sid, setSid] = React.useState(currentSid());
+        const [dirState, setDirState] = React.useState(null);
+        const [open, setOpen] = React.useState(false);
+
+        React.useEffect(() => {
+          const list = ctx.sessions.list;
+          const unsub = list.subscribe(() => setSid(currentSid()));
+          return unsub;
+        }, []);
+
+        React.useEffect(() => {
+          if (!md || !sid) { setDirState(null); return; }
+          let dir;
+          try { dir = md.directoryFor(sid); } catch { setDirState(null); return; }
+          const unsub = dir.store.subscribe(() => setDirState(dir.store.getSnapshot()));
+          setDirState(dir.store.getSnapshot());
+          return unsub;
+        }, [md, sid]);
+
+        if (!md || !dirState) return null;
+        const current = dirState.current;
+        const groups = dirState.groups || [];
+        const model = findModel(groups, current);
+        const efforts = model && model.reasoning ? model.reasoning.efforts : [];
+
+        const select = (provider, modelId, reasoningEffort) => {
+          if (!sid) return;
+          try {
+            md.directoryFor(sid).select({ provider, model: modelId, reasoningEffort }).catch(() => {});
+          } catch { /* ignore */ }
+        };
+
+        return h("div", { className: "dshhud-models" }, [
+          h("button", { className: "dshhud-model-trigger", title: "模型与推理强度", onClick: () => setOpen(!open) }, [
+            h("span", { className: "dshhud-model-name" }, model ? model.name : (current && current.model) || "模型"),
+            current && current.reasoningEffort
+              ? h("span", { className: "dshhud-model-effort" }, ((efforts.find((e) => e.id === current.reasoningEffort) || {}).name) || current.reasoningEffort)
+              : null
+          ]),
+          open ? h("div", { className: "dshhud-model-pop", onPointerDown: (e) => e.stopPropagation() }, [
+            ...groups.map((g) => [
+              h("div", { className: "dshhud-model-provider", key: "p-" + g.id }, g.name),
+              ...g.models.map((m) => h("button", {
+                key: g.id + "-" + m.id,
+                className: "dshhud-model-item" + (current && current.provider === g.id && current.model === m.id ? " dshhud-sel" : ""),
+                onClick: () => { select(g.id, m.id, current && current.reasoningEffort); setOpen(false); }
+              }, m.name))
+            ]),
+            efforts.length > 0
+              ? h(ModelRheostat, { efforts, current, select: (effId) => select(current.provider, current.model, effId) })
+              : null
+          ]) : null
+        ]);
+      }
+
+      ctx.effect(() => ctx.slots.inject("conversation.input.left", () => ctx.slots.register(
+        { name: "conversation.input.left", id: "ui-hud-model", order: 0, label: "模型与推理强度" },
+        () => h(ComposerModelControl)
+      )), "dsh-ui-hud: composer model control");
 
       // ================= 启动 =================
       refresh();

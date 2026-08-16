@@ -1,7 +1,7 @@
 {
   "name": "dsh-ui-hud",
-  "version": "0.3.0",
-  "description": "DSH 状态 HUD + 记忆中心 v3.0：可拖动状态栏 + 记忆抽屉 + 实时吞吐/上下文雷达/情绪联动 + 极简模式中枢（Ctrl+Shift+X 一键收敛全家桶）+ Scene Studio 场景联动（dsh:scene 同步 HUD 布局）。",
+  "version": "0.4.0",
+  "description": "DSH 状态 HUD + 记忆中心 v4.0：可拖动状态栏 + 记忆抽屉 + 实时吞吐/上下文雷达/情绪联动 + 极简模式中枢 + Scene Studio 联动 + Composer 模型选择器（权限旁，含推理强度变阻器）。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
