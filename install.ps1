@@ -1,9 +1,10 @@
-# dsh-mood-wallpaper + dsh-ui-hud 一键安装脚本（Windows PowerShell）
+# dsh-mood-wallpaper 全家桶 一键安装脚本（Windows PowerShell）
 #
 # 用法（一行）：
 #   irm https://raw.githubusercontent.com/wzyn20051216/dsh-mood-wallpaper/master/install.ps1 | iex
 #
-# 作用：把两个插件以 GitHub 直装方式装进你的 DSH web profile，无需 npm。
+# 作用：把全家桶两个插件（壁纸引擎 + 状态 HUD/记忆中心）以 GitHub 直装方式
+#       装进你的 DSH web profile，无需 npm。
 # 要求：已安装 DSH（dsh 命令可用）、git、网络可达 GitHub。
 
 param(
@@ -12,7 +13,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-Write-Host "=== dsh-mood-wallpaper + dsh-ui-hud 一键安装 ===" -ForegroundColor Cyan
+$REPO = "github:wzyn20051216/dsh-mood-wallpaper"
+$PLUGINS = @(
+    "$REPO#path=packages/dsh-mood-wallpaper",
+    "$REPO#path=packages/dsh-ui-hud"
+)
+
+Write-Host "=== dsh-mood-wallpaper 全家桶 一键安装 ===" -ForegroundColor Cyan
 
 # 1) 检查 dsh
 $dshCmd = Get-Command dsh -ErrorAction SilentlyContinue
@@ -25,7 +32,7 @@ Write-Host "[1/3] dsh 可用: $($dshCmd.Source)"
 
 # 2) GitHub 直装两个插件（无构建脚本，无需 pnpm allowBuilds）
 Write-Host "[2/3] 安装插件到 profile '$ProfileName' ..." -ForegroundColor Cyan
-dsh plugin --profile $ProfileName add "github:wzyn20051216/dsh-mood-wallpaper" "github:wzyn20051216/dsh-ui-hud"
+dsh plugin --profile $ProfileName add $PLUGINS
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[错误] 插件安装失败，退出码 $LASTEXITCODE" -ForegroundColor Red
     exit 1
@@ -42,4 +49,3 @@ Write-Host ""
 Write-Host "卸载：" -ForegroundColor Gray
 Write-Host "  dsh plugin --profile $ProfileName remove dsh-mood-wallpaper"
 Write-Host "  dsh plugin --profile $ProfileName remove dsh-ui-hud"
-
