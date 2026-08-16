@@ -4,7 +4,7 @@
 
 **DSH（DeepSeek Harness）壁纸感知的动态壁纸引擎** —— 会"读懂"你的壁纸、随 agent 状态起舞的状态机 + 一串程序员向特效。
 
-[![npm version](https://img.shields.io/npm/v/dsh-mood-wallpaper?color=4f83f2&label=npm)](https://www.npmjs.com/package/dsh-mood-wallpaper)
+[![version](https://img.shields.io/github/v/tag/wzyn20051216/dsh-mood-wallpaper?color=4f83f2&label=version)](https://github.com/wzyn20051216/dsh-mood-wallpaper/releases)
 [![license](https://img.shields.io/github/license/wzyn20051216/dsh-mood-wallpaper?color=34d399)](LICENSE)
 [![dsh](https://img.shields.io/badge/dsh-0.1.0--rc.6-blueviolet)](https://github.com/deepseek-ai/deepseek-harness)
 [![node](https://img.shields.io/badge/node-%3E%3D18-6d9af6)](package.json)
@@ -128,3 +128,4 @@ dsh-mood-wallpaper/
 ## 📄 License
 
 [MIT](LICENSE)
+
