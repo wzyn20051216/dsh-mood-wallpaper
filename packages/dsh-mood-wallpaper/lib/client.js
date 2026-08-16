@@ -894,20 +894,6 @@ window.__ModuleLoader__.load({
       window.addEventListener("dsh:minimal", onMinimalEvent);
       disposables.push(() => window.removeEventListener("dsh:minimal", onMinimalEvent));
 
-      // ================= 氛围能量（Composer 变阻器 → 壁纸强度联动 + 脉冲反馈） =================
-      function onEnergyEvent(e) {
-        const v = e && e.detail && e.detail.intensity;
-        if (typeof v !== "number" || !isFinite(v)) return;
-        const val = Math.max(0.3, Math.min(2, v));
-        applyConfig({ intensity: val });
-        // 交互反馈：中心粒子爆散 + 短暂光脉冲
-        burst(innerWidth / 2, innerHeight * 0.42, Math.round(14 + 16 * val));
-        setVar("--dswm-glow-op", (currentStyle.glow * 0.22 * (1 + val * 0.6)).toFixed(3));
-        setTimeout(() => { try { applyStyle(); } catch { /* ignore */ } }, 280);
-      }
-      window.addEventListener("dsh:mood:energy", onEnergyEvent);
-      disposables.push(() => window.removeEventListener("dsh:mood:energy", onEnergyEvent));
-
       // ================= 后台分析（ImageDecoder 取帧 → 色板/亮度/动态能量） =================
       async function computeAnalysis(url, mime) {
         const res = await fetch(url);
