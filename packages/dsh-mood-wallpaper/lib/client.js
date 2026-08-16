@@ -73,7 +73,9 @@ window.__ModuleLoader__.load({
         whale: true,
         glass: false
       },
-      analysis: {}
+      analysis: {},
+      /** 性能档位策略：auto（按平均 FPS 自动）| 60 | 30 | 15（手动锁定）。 */
+      perfMode: "auto"
     };
 
     /** 手动风格预设（style != auto 时覆盖分析结果）。 */
@@ -194,13 +196,151 @@ window.__ModuleLoader__.load({
         analyzing: null,
         analysisInfo: null,
         importing: false,
-        error: null
+        error: null,
+        perf: null
       }, cfg);
       const store = {
         get: () => state,
         set(patch) { state = Object.assign({}, state, patch); for (const l of listeners) l(state); },
         subscribe(fn) { listeners.add(fn); return () => { listeners.delete(fn); }; }
       };
+
+      // ================= 自适应性能档位（实时性能治理） =================
+      // 自动检测平均 FPS → 60/30/15 三档；电池供电降着色器分辨率；
+      // 高上下文压力/大量工具调用减非关键特效；WebGL 上下文丢失自动恢复；
+      // 设置页展示大致 GPU/CPU 开销。perfMode 可手动锁定档位。
+      const perf = {
+        fps: 60,
+        tier: "high",        // high(60) / medium(30) / low(15)
+        target: 60,
+        resScale: 1,         // 着色器渲染分辨率缩放（低档/电池 → 缩小）
+        reduce: false,       // 软降级：关闭/弱化非关键特效（不写入配置）
+        batteryDischarging: false,
+        batteryLow: false,
+        pressure: 0,         // 上下文压力 0-100
+        toolLoad: 0,         // 并发工具调用数
+        contextLost: false
+      };
+      let perfBattery = null;
+      let currentSession = null;
+      let lastFrameT = 0;
+      let fpsAccum = 0;
+      let fpsFrames = 0;
+      let lastParticleRender = 0;
+      let lastShaderRender = 0;
+
+      function tierBaseScale(tier) {
+        return tier === "high" ? 1 : tier === "medium" ? 0.7 : 0.5;
+      }
+      function tierTarget(tier) {
+        return tier === "high" ? 60 : tier === "medium" ? 30 : 15;
+      }
+      function classifyFps(fps) {
+        if (cfg.perfMode === "60") return "high";
+        if (cfg.perfMode === "30") return "medium";
+        if (cfg.perfMode === "15") return "low";
+        // 滞回：升级阈值高于降级阈值，避免档位抖动
+        if (perf.tier === "high") return fps < 38 ? (fps < 22 ? "low" : "medium") : "high";
+        if (perf.tier === "medium") return fps < 22 ? "low" : (fps > 50 ? "high" : "medium");
+        return fps > 40 ? (fps > 52 ? "high" : "medium") : "low";
+      }
+
+      function perfSnapshot() {
+        return {
+          fps: Math.round(perf.fps),
+          tier: perf.tier,
+          target: perf.target,
+          mode: cfg.perfMode || "auto",
+          battery: perf.batteryDischarging ? (perf.batteryLow ? "低电量" : "放电中") : (perfBattery ? "充电中" : "未知"),
+          shaderPixels: shader ? shader.canvas.width + "×" + shader.canvas.height : "—",
+          particleCount: particles.length,
+          rainCols: rain.length,
+          pressure: perf.pressure,
+          toolLoad: perf.toolLoad,
+          contextLost: perf.contextLost
+        };
+      }
+
+      function applyPerf() {
+        const stressed = perf.pressure >= 70 || perf.toolLoad >= 5;
+        const reduce = perf.tier === "low" || (perf.tier === "medium" && stressed) || reducedMotion;
+        if (reduce !== perf.reduce) {
+          perf.reduce = reduce;
+          // 肯本斯缩放平移属非关键特效：低档/高压下关闭
+          wallEl.setAttribute("data-kenburns", (cfg.kenburns && !perf.reduce) ? "1" : "0");
+        }
+        // 节流同步到 store：仅档位/较大 FPS 变化/压力变化时触发设置页重渲染
+        const snap = perfSnapshot();
+        const prev = state.perf;
+        if (!prev || prev.tier !== snap.tier || prev.pressure !== snap.pressure
+          || Math.abs(prev.fps - snap.fps) >= 4 || prev.contextLost !== snap.contextLost) {
+          store.set({ perf: snap });
+        }
+      }
+
+      function updatePerf(fps) {
+        perf.fps = fps;
+        const tier = classifyFps(fps);
+        const batScale = perf.batteryLow ? 0.6 : 1; // 电池低电量：着色器分辨率再降一档
+        if (tier !== perf.tier) {
+          perf.tier = tier;
+          perf.target = tierTarget(tier);
+        }
+        const newScale = tierBaseScale(perf.tier) * batScale;
+        if (newScale !== perf.resScale) {
+          perf.resScale = newScale;
+          if (shader) resizeShader(); // 档位/电池变化 → 即时调着色器分辨率
+        }
+        applyPerf();
+      }
+
+      function readPressure() {
+        try {
+          const face = currentSession && currentSession.projections && currentSession.projections.faceOf("contextPressure");
+          const p = face ? face.getSnapshot() : null;
+          if (p && p.contextWindow && p.projectedTokens) {
+            return Math.min(100, Math.round((p.projectedTokens / p.contextWindow) * 100));
+          }
+        } catch { /* ignore */ }
+        return 0;
+      }
+
+      function initBattery() {
+        try {
+          if (!navigator.getBattery) return;
+          navigator.getBattery().then((b) => {
+            perfBattery = b;
+            const update = () => {
+              perf.batteryDischarging = !!b.discharging;
+              perf.batteryLow = b.level <= 0.2 || (b.discharging && b.level <= 0.4);
+              updatePerf(perf.fps); // 电池状态变化 → 立即重算档位/分辨率
+            };
+            update();
+            b.addEventListener("levelchange", update);
+            b.addEventListener("chargingchange", update);
+            disposables.push(() => {
+              try { b.removeEventListener("levelchange", update); } catch { /* ignore */ }
+              try { b.removeEventListener("chargingchange", update); } catch { /* ignore */ }
+            });
+          }).catch(() => { /* 浏览器不支持电池 API 时静默 */ });
+        } catch { /* ignore */ }
+      }
+
+      // ---- WebGL 上下文丢失自动恢复 ----
+      function onContextLost(e) {
+        if (!shader) return;
+        if (e && e.preventDefault) e.preventDefault();
+        perf.contextLost = true;
+        if (shader.raf) { cancelAnimationFrame(shader.raf); shader.raf = null; }
+        applyPerf();
+      }
+      function onContextRestored() {
+        perf.contextLost = false;
+        const id = shader ? shader.id : null;
+        if (shader && shader.canvas && shader.canvas.parentNode) shader.canvas.remove();
+        shader = null;
+        if (id) initShader(id);
+      }
 
       // ================= 私有样式 =================
       const styleEl = document.createElement("style");
@@ -653,7 +793,7 @@ window.__ModuleLoader__.load({
         const i = Math.max(0.2, Number(cfg.intensity) || 1);
         setVar("--dswm-kb2", (11 / i).toFixed(2) + "s");
         setVar("--dswm-sweep-dur", (7 / i).toFixed(2) + "s");
-        wallEl.setAttribute("data-kenburns", cfg.kenburns ? "1" : "0");
+        wallEl.setAttribute("data-kenburns", (cfg.kenburns && !perf.reduce) ? "1" : "0");
         wallEl.setAttribute("data-crt", cfg.fx && cfg.fx.crt ? "1" : "0");
         wallEl.setAttribute("data-daynight", cfg.fx && cfg.fx.daynight ? "1" : "0");
         wallEl.setAttribute("data-whale", cfg.fx && cfg.fx.whale ? "1" : "0");
@@ -1036,6 +1176,11 @@ window.__ModuleLoader__.load({
           locC3: gl.getUniformLocation(prog, "u_c3"),
           raf: null
         };
+        // WebGL 上下文丢失自动恢复：丢失暂停，恢复后重建着色器
+        canvas.addEventListener("webglcontextlost", onContextLost, false);
+        canvas.addEventListener("webglcontextrestored", onContextRestored, false);
+        shader._onLost = onContextLost;
+        shader._onRestored = onContextRestored;
         resizeShader();
         renderShaderFrame(0);
         if (!reducedMotion) shader.raf = requestAnimationFrame(shaderLoop);
@@ -1043,7 +1188,8 @@ window.__ModuleLoader__.load({
       }
       function resizeShader() {
         if (!shader) return;
-        const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+        // 分辨率随性能档位/电池状态缩放（perf.resScale）
+        const dpr = Math.min(1.5, window.devicePixelRatio || 1) * perf.resScale;
         const w = Math.max(2, Math.round(mediaWrap.clientWidth * dpr));
         const h = Math.max(2, Math.round(mediaWrap.clientHeight * dpr));
         if (shader.canvas.width !== w || shader.canvas.height !== h) {
@@ -1069,12 +1215,25 @@ window.__ModuleLoader__.load({
       function shaderLoop() {
         if (!shader) return;
         if (document.hidden) { shader.raf = null; return; }
-        renderShaderFrame(performance.now() / 1000);
+        const now = performance.now();
+        if (now - lastShaderRender < 1000 / perf.target) {
+          shader.raf = requestAnimationFrame(shaderLoop);
+          return;
+        }
+        lastShaderRender = now;
+        renderShaderFrame(now / 1000);
         shader.raf = requestAnimationFrame(shaderLoop);
       }
       function disposeShader() {
         if (!shader) return;
         if (shader.raf) cancelAnimationFrame(shader.raf);
+        // 先摘除上下文监听，避免手动 loseContext 误触发 onContextLost
+        if (shader._onLost && shader.canvas) {
+          try { shader.canvas.removeEventListener("webglcontextlost", shader._onLost, false); } catch { /* ignore */ }
+        }
+        if (shader._onRestored && shader.canvas) {
+          try { shader.canvas.removeEventListener("webglcontextrestored", shader._onRestored, false); } catch { /* ignore */ }
+        }
         try {
           const ext = shader.gl.getExtension("WEBGL_lose_context");
           if (ext) ext.loseContext();
@@ -1443,7 +1602,7 @@ window.__ModuleLoader__.load({
           mouse.tx = e.clientX / innerWidth;
           mouse.ty = e.clientY / innerHeight;
         }
-        if (cfg.fx && cfg.fx.trail && !reducedMotion) {
+        if (cfg.fx && cfg.fx.trail && !reducedMotion && !perf.reduce) {
           const now = performance.now();
           if (now - lastTrail > 28 && particles.length < 150) {
             lastTrail = now;
@@ -1525,15 +1684,34 @@ window.__ModuleLoader__.load({
       }
 
       function tick() {
+        const now = performance.now();
+        // FPS 采样（即使跳帧也统计，保证档位判断准确）
+        if (lastFrameT > 0) {
+          const dt = now - lastFrameT;
+          if (dt > 0) { fpsAccum += dt; fpsFrames++; }
+        }
+        lastFrameT = now;
+        if (fpsAccum >= 500) {
+          updatePerf(fpsFrames * 1000 / fpsAccum);
+          fpsAccum = 0; fpsFrames = 0;
+        }
         if (document.hidden) { raf = null; return; }
+        // 帧率档位跳帧：低档减少实际渲染次数
+        if (now - lastParticleRender < 1000 / perf.target) {
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+        lastParticleRender = now;
         pctx.clearRect(0, 0, innerWidth, innerHeight);
 
-        // 鼠标视差平滑
-        mouse.x += (mouse.tx - mouse.x) * 0.05;
-        mouse.y += (mouse.ty - mouse.y) * 0.05;
-        const px = (mouse.x - 0.5) * 26;
-        const py = (mouse.y - 0.5) * 18;
-        glowEl.style.transform = "translate3d(" + px + "px," + py + "px,0)";
+        // 鼠标视差平滑（非关键特效：高压/低档时关闭）
+        if (!perf.reduce) {
+          mouse.x += (mouse.tx - mouse.x) * 0.05;
+          mouse.y += (mouse.ty - mouse.y) * 0.05;
+          const px = (mouse.x - 0.5) * 26;
+          const py = (mouse.y - 0.5) * 18;
+          glowEl.style.transform = "translate3d(" + px + "px," + py + "px,0)";
+        }
 
         // 敲击能量场：输入密度 → 粒子速度加成
         const nowMs = Date.now();
@@ -1607,7 +1785,10 @@ window.__ModuleLoader__.load({
           const alphaBase = intense ? 0.38 : 0.11;
           pctx.font = "13px 'Cascadia Mono', Consolas, 'Courier New', monospace";
           pctx.textAlign = "left";
-          for (const col of rain) {
+          // 高压/低档：代码雨列减半（非关键特效降级）
+          const rainStep = perf.reduce ? 2 : 1;
+          for (let ri = 0; ri < rain.length; ri += rainStep) {
+            const col = rain[ri];
             col.speed += (col.baseSpeed * speedMul - col.speed) * 0.06;
             col.y += col.speed;
             if (col.y > innerHeight + 30) col.y = -20 - Math.random() * 90;
@@ -1732,6 +1913,10 @@ window.__ModuleLoader__.load({
 
       function onSnapshot(snap) {
         evaluateAlert(snap);
+        // 实时性能治理输入：上下文压力 + 并发工具调用数
+        perf.pressure = readPressure();
+        perf.toolLoad = snap && snap.runningCalls ? snap.runningCalls.length : 0;
+        applyPerf();
         if (!cfg.enabled) {
           setMachine("idle");
           wasActive = isActive(snap);
@@ -1768,6 +1953,7 @@ window.__ModuleLoader__.load({
       let unsubSession = null;
       function observeCurrent() {
         if (unsubSession) { unsubSession(); unsubSession = null; }
+        currentSession = null;
         let list = null;
         try { list = ctx.sessions.list.getSnapshot(); } catch { list = null; }
         const sid = list && list.current;
@@ -1776,6 +1962,7 @@ window.__ModuleLoader__.load({
         try { binding = ctx.sessions.binding(sid); } catch { binding = null; }
         if (!binding || !binding.session) { onSnapshot(null); return; }
         const session = binding.session;
+        currentSession = session;
         unsubSession = session.subscribe(() => onSnapshot(session.getSnapshot()));
         disposables.push(() => { if (unsubSession) unsubSession(); });
         onSnapshot(session.getSnapshot());
@@ -1803,6 +1990,9 @@ window.__ModuleLoader__.load({
         if (patch.fx !== void 0) {
           if (patch.fx.sound && !audioCtx) ensureAudioGesture();
           if (!patch.fx.sound && audioCtx) ambState("idle");
+        }
+        if (patch.perfMode !== void 0) {
+          updatePerf(perf.fps); // 手动档位立即生效
         }
       }
 
@@ -2023,6 +2213,38 @@ window.__ModuleLoader__.load({
           ]),
 
           h("div", { className: "dswm-card" }, [
+            h("div", { className: "dswm-title" }, "性能治理 · Performance"),
+            h("div", { className: "dswm-row" }, [
+              h("span", { className: "dswm-label" }, "档位策略"),
+              h("select", {
+                className: "dswm-select dswm-grow",
+                value: snap.perfMode || "auto",
+                onChange: (e) => applyConfig({ perfMode: e.target.value })
+              }, [
+                h("option", { value: "auto" }, "自动（按平均 FPS 分档）"),
+                h("option", { value: "60" }, "锁定 60 FPS"),
+                h("option", { value: "30" }, "锁定 30 FPS"),
+                h("option", { value: "15" }, "锁定 15 FPS")
+              ])
+            ]),
+            h("div", { className: "dswm-row", style: { flexWrap: "wrap", gap: "8px" } },
+              (snap.perf
+                ? [
+                    h("span", { className: "dswm-state-pill" }, "FPS " + snap.perf.fps),
+                    h("span", { className: "dswm-state-pill" }, (snap.perf.tier === "high" ? "高" : snap.perf.tier === "medium" ? "中" : "低") + "档 · " + snap.perf.target + "fps"),
+                    h("span", { className: "dswm-state-pill" }, "🔋 " + snap.perf.battery),
+                    h("span", { className: "dswm-state-pill" }, "GPU " + snap.perf.shaderPixels),
+                    h("span", { className: "dswm-state-pill" }, "粒子 " + snap.perf.particleCount + " · 雨列 " + snap.perf.rainCols),
+                    snap.perf.pressure > 0 ? h("span", { className: "dswm-state-pill" }, "上下文 " + snap.perf.pressure + "%") : null,
+                    snap.perf.toolLoad > 0 ? h("span", { className: "dswm-state-pill" }, "工具 " + snap.perf.toolLoad) : null,
+                    snap.perf.contextLost ? h("span", { className: "dswm-state-pill" }, "WebGL 恢复中…") : null
+                  ].filter(Boolean)
+                : [h("span", { className: "dswm-hint" }, "正在采样平均 FPS…")])),
+            h("div", { className: "dswm-hint" },
+              "自动检测平均 FPS → 60/30/15 三档；电池供电自动降低着色器分辨率；高上下文压力（≥70%）或大量工具调用（≥5 并发）时减少非关键特效；WebGL 上下文丢失后自动重建。")
+          ]),
+
+          h("div", { className: "dswm-card" }, [
             h("div", { className: "dswm-title" }, "场景皮肤 · Scene Skins"),
             h("div", { className: "dswm-row", style: { flexWrap: "wrap" } },
               Object.keys(SCENE_SKINS).map((key) => h("button", {
@@ -2146,6 +2368,7 @@ window.__ModuleLoader__.load({
       // ================= 启动 =================
       loadWallpapers();
       loadHostConfig();
+      initBattery();
 
       // ================= 卸载清理 =================
       ctx.effect(() => () => {
