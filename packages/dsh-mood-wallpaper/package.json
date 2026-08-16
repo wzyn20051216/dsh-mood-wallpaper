@@ -1,7 +1,7 @@
 {
   "name": "dsh-mood-wallpaper",
-  "version": "0.8.0",
-  "description": "DSH 壁纸感知动态壁纸引擎 v8（monorepo 版）：场景皮肤、玻璃材质、鲸鱼伙伴化、自定义文件夹壁纸、WebGL 着色器、后台分析、状态机 + 警报氛围 + token 速率驱动。",
+  "version": "0.8.1",
+  "description": "DSH 壁纸感知动态壁纸引擎 v8.1（monorepo 版）：场景皮肤、玻璃材质、鲸鱼伙伴化、自定义文件夹壁纸、WebGL 着色器、后台分析、状态机 + 警报氛围 + token 速率驱动 + 极简模式（静默极简皮肤）。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",

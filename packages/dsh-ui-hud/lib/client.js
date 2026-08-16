@@ -42,7 +42,8 @@ window.__ModuleLoader__.load({
       hud: true,
       hudAutoHide: true,
       memory: true,
-      hudPos: null
+      hudPos: null,
+      minimal: false
     };
 
     function loadConfig() {
@@ -940,6 +941,9 @@ window.__ModuleLoader__.load({
         } else if (k === "m") {
           e.preventDefault();
           if (cfg.memory) toggleDrawer();
+        } else if (k === "x") {
+          e.preventDefault();
+          toggleMinimal();
         }
       }
       window.addEventListener("keydown", onKeyDown);
@@ -964,6 +968,34 @@ window.__ModuleLoader__.load({
         }
         if (patch.memory === false && state.drawerOpen) toggleDrawer();
       }
+
+      // ================= 极简模式（全家桶统一收敛：HUD/壁纸/桌宠） =================
+      function broadcastMinimal(minimal) {
+        try {
+          window.dispatchEvent(new CustomEvent("dsh:minimal", { detail: { minimal } }));
+        } catch { /* ignore */ }
+      }
+      function applyMinimal() {
+        bar.classList.toggle("dshhud-hidden", !cfg.hud || cfg.minimal);
+      }
+      function toggleMinimal() {
+        cfg.minimal = !cfg.minimal;
+        saveConfig();
+        store.set({ minimal: cfg.minimal });
+        applyMinimal();
+        if (state.drawerOpen) toggleDrawer();
+        broadcastMinimal(cfg.minimal);
+      }
+      function onMinimalEvent(e) {
+        if (e && e.detail && typeof e.detail.minimal === "boolean" && e.detail.minimal !== cfg.minimal) {
+          cfg.minimal = e.detail.minimal;
+          saveConfig();
+          store.set({ minimal: cfg.minimal });
+          applyMinimal();
+        }
+      }
+      window.addEventListener("dsh:minimal", onMinimalEvent);
+      disposables.push(() => window.removeEventListener("dsh:minimal", onMinimalEvent));
 
       // ================= 设置页 UI =================
       function SettingsView() {
@@ -999,6 +1031,11 @@ window.__ModuleLoader__.load({
             switchRow("记忆抽屉", "会话时间线/固定/上下文注入/附件四类记忆可视化", snap.memory, (e) => applyConfig({ memory: e.target.checked })),
             h("div", { className: "dshhud-note" }, "快捷键：Ctrl+Shift+M 打开/关闭记忆抽屉")
           ]),
+          h("div", { className: "dshhud-card2" }, [
+            h("div", { className: "dshhud-title" }, "极简模式 · Minimal Mode"),
+            switchRow("极简模式", "一键收敛全家桶：隐藏 HUD / 桌宠 / 壁纸特效，专注模式", snap.minimal, (e) => toggleMinimal()),
+            h("div", { className: "dshhud-note" }, "快捷键 Ctrl+Shift+X 切换；会同步通知壁纸引擎与桌宠一起收敛")
+          ]),
           h("div", { className: "dshhud-note" }, "配置保存在浏览器 localStorage。数据全部来自官方会话快照与投影服务。")
         ]);
       }
@@ -1011,6 +1048,7 @@ window.__ModuleLoader__.load({
       // ================= 启动 =================
       refresh();
       applyBarPos();
+      applyMinimal();
 
       // ================= 卸载清理 =================
       ctx.effect(() => () => {

@@ -669,6 +669,22 @@ window.__ModuleLoader__.load({
         } catch { /* ignore */ }
       }
 
+      // ================= 极简模式（收到 dsh-ui-hud 广播 → 应用静默极简皮肤） =================
+      let preMinimalSkin = null;
+      function onMinimalEvent(e) {
+        const minimal = e && e.detail && e.detail.minimal;
+        if (minimal) {
+          if (!preMinimalSkin) preMinimalSkin = state.skinKey || null;
+          applySkin("静默极简");
+        } else if (preMinimalSkin) {
+          const k = preMinimalSkin;
+          preMinimalSkin = null;
+          if (k && SCENE_SKINS[k]) applySkin(k);
+        }
+      }
+      window.addEventListener("dsh:minimal", onMinimalEvent);
+      disposables.push(() => window.removeEventListener("dsh:minimal", onMinimalEvent));
+
       // ================= 后台分析（ImageDecoder 取帧 → 色板/亮度/动态能量） =================
       async function computeAnalysis(url, mime) {
         const res = await fetch(url);

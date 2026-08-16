@@ -493,6 +493,15 @@ window.__ModuleLoader__.load({
       window.addEventListener("keydown", onKeyDown);
       disposables.push(() => window.removeEventListener("keydown", onKeyDown));
 
+      // 极简模式：收到 dsh-ui-hud 广播 → 临时隐藏桌宠（不改变用户设置）
+      let minimalTemp = false;
+      function onMinimalEvent(e) {
+        minimalTemp = !!(e && e.detail && e.detail.minimal);
+        pet.classList.toggle("dswp-hidden", !cfg.visible || minimalTemp);
+      }
+      window.addEventListener("dsh:minimal", onMinimalEvent);
+      disposables.push(() => window.removeEventListener("dsh:minimal", onMinimalEvent));
+
       function applyConfig(patch) {
         Object.assign(cfg, patch);
         saveConfig();

@@ -8,7 +8,7 @@
 |---|---|---|
 | 🌌 **dsh-mood-wallpaper** | 壁纸感知动态壁纸引擎 | 壁纸随 agent 状态起舞：后台分析、状态机动效、WebGL 着色器、鲸鱼巡游、场景皮肤 |
 | 🧠 **dsh-ui-hud** | 状态 HUD + 记忆中心 | 可拖动状态栏（模型/token/上下文压力/实时吞吐）+ 四类记忆可视化面板 |
-| 🐋 **dsh-whale-pet** | 自研鲸鱼桌宠 | 独立悬浮、可拖动、随状态联动（思考游动/完成跃水）、点击互动冒泡说话 |
+| 🐋 **dsh-whale-pet** | 自研鲸鱼桌宠 | 独立悬浮、可拖动、随状态联动（思考游动/完成跃水）、点击互动冒泡说话、多形象系统（5 内置 + 自定义上传） |
 
 [![version](https://img.shields.io/github/v/tag/wzyn20051216/dsh-mood-wallpaper?color=4f83f2&label=version)](https://github.com/wzyn20051216/dsh-mood-wallpaper/releases)
 [![license](https://img.shields.io/github/license/wzyn20051216/dsh-mood-wallpaper?color=34d399)](LICENSE)
@@ -79,15 +79,23 @@ dsh plugin --profile web remove dsh-whale-pet
 
 **快速上手**：右下角悬浮条 → 按住可拖到任意位置 → 点「📖 记忆」或 `Ctrl+Shift+M` 打开记忆抽屉 → 点抽屉外任意处收起。
 
+**极简模式（全家桶一键收敛）**：按 `Ctrl+Shift+X` 或到 HUD 设置页打开「极简模式」——HUD 状态栏、桌宠、壁纸特效（着色器/鲸鱼/昼夜/玻璃/媒体）全部收敛为「静默极简」皮肤，只剩一张安静的背景图，专注当前会话；再按一次恢复原状。HUD 作为中枢广播 `dsh:minimal` 事件，壁纸引擎与桌宠各自监听收敛，无需逐个配置。
+
 ## 🐋 插件三：dsh-whale-pet（自研鲸鱼桌宠）
 
 独立悬浮鲸鱼（默认右下角上方）：按住拖动、双击缩放、点击冒泡说话；空闲漂浮、**思考时快速游动**、**完成时跃水庆祝**。快捷键 `Ctrl+Shift+W` 显示/隐藏。
 
 > 完整功能：[packages/dsh-whale-pet/README.md](packages/dsh-whale-pet/README.md)
 
+**快速上手**：默认鲸鱼在右下角上方；设置页可切换 5 个内置形象（鲸鱼/猫/企鹅/幽灵/恐龙），或上传自定义形象（PNG/GIF/WebP ≤3MB ×3，支持从图片 URL 直接添加）——上传播放帧即可拥有自己专属的桌宠。
+
 ## 🔗 跨插件联动
 
-两个插件**天生互补**：壁纸引擎分析出的主色调/强调色会实时广播给 HUD——壁纸是什么氛围，状态栏就是什么颜色（情绪联动）。
+三个插件**天生互补**：
+
+- **情绪联动**：壁纸引擎分析出的主色调/强调色实时广播给 HUD——壁纸是什么氛围，状态栏就是什么颜色；
+- **极简模式**：HUD 作中枢广播 `dsh:minimal`（`Ctrl+Shift+X`），壁纸引擎切换「静默极简」皮肤、桌宠临时隐藏，全家桶一键收敛/一键恢复；
+- **状态同步**：壁纸状态机（空闲/思考/完成）与桌宠游动/跃水、HUD 状态标签都来自同一份官方会话快照，天然同频。
 
 ## 🖼️ 壁纸与开源致谢
 
@@ -96,7 +104,7 @@ dsh plugin --profile web remove dsh-whale-pet
 
 ## 🧪 冒烟测试
 
-两个插件均通过：API 路由（list/asset/import/delete/config + 路径穿越拦截 + nosniff + 魔数校验）、浏览器 E2E（状态机 idle→thinking→done→idle、文件夹壁纸应用、场景皮肤组合、鲸鱼互动、HUD 拖动与位置持久化、抽屉开关/点外收起、快捷键）、15 插件共存无冲突。
+三个插件均通过：API 路由（list/asset/import/delete/config + 路径穿越拦截 + nosniff + 魔数校验）、浏览器 E2E（状态机 idle→thinking→done→idle、文件夹壁纸应用、场景皮肤组合、鲸鱼互动、HUD 拖动与位置持久化、抽屉开关/点外收起、快捷键、极简模式进入/退出全家桶收敛与恢复）、15 插件共存无冲突。
 
 ## 🤝 贡献
 
