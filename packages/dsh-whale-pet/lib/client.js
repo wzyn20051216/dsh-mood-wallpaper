@@ -33,7 +33,11 @@ window.__ModuleLoader__.load({
       opacity: 0.9,
       talk: true,
       petId: "whale",
-      customPets: []
+      customPets: [],
+      /** 导入图片时自动去除背景（白底/纯色底 → 透明）。 */
+      removeBg: true,
+      /** 去背景颜色容差（越大去除越多）。 */
+      bgTolerance: 34
     };
 
     const LINES = [
@@ -172,6 +176,7 @@ window.__ModuleLoader__.load({
         #dswp-whale img.dswp-img {
           filter: drop-shadow(0 4px 18px rgba(0,0,0,0.25));
           border-radius: 12px; background: rgba(255,255,255,0.06);
+          -webkit-user-drag: none; user-drag: none; /* 禁止原生图片拖拽，避免干扰桌宠拖动 */
         }
         #dswp-whale svg { filter: drop-shadow(0 4px 18px rgba(45,212,191,0.35)); }
 
@@ -348,6 +353,7 @@ window.__ModuleLoader__.load({
           img.className = "dswp-img";
           img.src = p.dataUrl;
           img.alt = p.name || "桌宠";
+          img.draggable = false;
           pet.appendChild(img);
         } else {
           const wrap = document.createElement("span");
@@ -467,7 +473,8 @@ window.__ModuleLoader__.load({
       // 拖拽
       let dragState = null;
       pet.addEventListener("pointerdown", (e) => {
-        dragState = { dx: e.clientX - pet.offsetLeft, dy: e.clientY - pet.offsetTop };
+        const r = pet.getBoundingClientRect();
+        dragState = { dx: e.clientX - r.left, dy: e.clientY - r.top };
         try { pet.setPointerCapture(e.pointerId); } catch { /* ignore */ }
       });
       pet.addEventListener("pointermove", (e) => {
@@ -523,22 +530,131 @@ window.__ModuleLoader__.load({
         applyVisual();
       }
 
+      // ================= 数字图像预处理（去背景 / 裁剪 / 缩放） =================
+      // 采样边框主色 → 颜色键去背景（含羽化边缘）→ 裁剪透明边界 → 限制最大边长。
+      function processPetImage(dataUrl) {
+        return new Promise((resolve) => {
+          // GIF 保持逐帧动画，跳过逐像素去背景（避免丢帧）
+          if (/^data:image\/gif/i.test(dataUrl)) {
+            resolve({ dataUrl, removed: false });
+            return;
+          }
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const MAX = 512;
+              const s = Math.min(1, MAX / Math.max(img.naturalWidth, img.naturalHeight));
+              let w = Math.max(1, Math.round(img.naturalWidth * s));
+              let h = Math.max(1, Math.round(img.naturalHeight * s));
+              let canvas = document.createElement("canvas");
+              canvas.width = w; canvas.height = h;
+              const g = canvas.getContext("2d", { willReadFrequently: true });
+              g.drawImage(img, 0, 0, w, h);
+
+              let removed = false;
+              if (cfg.removeBg) {
+                const id = g.getImageData(0, 0, w, h);
+                const bg = detectBackground(id.data, w, h);
+                if (colorKeyRemove(id.data, w, h, bg, Number(cfg.bgTolerance) || 34)) {
+                  g.putImageData(id, 0, 0);
+                  const box = trimBounds(id.data, w, h, 10);
+                  if (box && box.w > 4 && box.h > 4) {
+                    const c2 = document.createElement("canvas");
+                    c2.width = box.w; c2.height = box.h;
+                    c2.getContext("2d").drawImage(canvas, box.x, box.y, box.w, box.h, 0, 0, box.w, box.h);
+                    canvas = c2;
+                  }
+                  removed = true;
+                }
+              }
+              resolve({ dataUrl: canvas.toDataURL("image/png"), removed });
+            } catch (e) {
+              resolve({ dataUrl, removed: false }); // 处理失败回退原图
+            }
+          };
+          img.onerror = () => resolve({ dataUrl, removed: false });
+          img.src = dataUrl;
+        });
+      }
+
+      function detectBackground(data, w, h) {
+        const hist = new Map();
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (x > 2 && x < w - 3 && y > 2 && y < h - 3) continue; // 只采样 3px 边框
+            const i = (y * w + x) * 4;
+            if (data[i + 3] < 128) continue;
+            const key = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+            const e = hist.get(key) || { r: 0, g: 0, b: 0, n: 0 };
+            e.r += data[i]; e.g += data[i + 1]; e.b += data[i + 2]; e.n++;
+            hist.set(key, e);
+          }
+        }
+        let best = null;
+        for (const e of hist.values()) if (!best || e.n > best.n) best = e;
+        return best ? { r: best.r / best.n, g: best.g / best.n, b: best.b / best.n } : { r: 255, g: 255, b: 255 };
+      }
+
+      function colorKeyRemove(data, w, h, bg, tol) {
+        const tol2 = tol * tol;
+        const feather = tol * 1.6;
+        const feather2 = feather * feather;
+        let changed = false;
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3];
+          if (a < 8) continue;
+          const dr = data[i] - bg.r, dg = data[i + 1] - bg.g, db = data[i + 2] - bg.b;
+          const d2 = dr * dr + dg * dg + db * db;
+          if (d2 <= tol2) {
+            data[i + 3] = 0;
+            changed = true;
+          } else if (d2 <= feather2) {
+            const t = Math.sqrt(d2);
+            const alpha = (t - tol) / (feather - tol);
+            const na = Math.round(a * alpha);
+            if (na < a) { data[i + 3] = na; changed = true; }
+          }
+        }
+        return changed;
+      }
+
+      function trimBounds(data, w, h, alphaMin) {
+        let minX = w, minY = h, maxX = -1, maxY = -1;
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            if (data[(y * w + x) * 4 + 3] > alphaMin) {
+              if (x < minX) minX = x;
+              if (x > maxX) maxX = x;
+              if (y < minY) minY = y;
+              if (y > maxY) maxY = y;
+            }
+          }
+        }
+        if (maxX < 0) return null;
+        minX = Math.max(0, minX - 3);
+        minY = Math.max(0, minY - 3);
+        maxX = Math.min(w - 1, maxX + 3);
+        maxY = Math.min(h - 1, maxY + 3);
+        return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+      }
+
       // ================= 自定义形象上传 =================
       function importPet(file) {
         if (!file) return;
         if (file.size > MAX_IMG) { say("图片太大了（≤3MB）～"); return; }
         if ((cfg.customPets || []).length >= MAX_CUSTOM) { say("自定义形象最多 3 个～"); return; }
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
+          const processed = await processPetImage(String(reader.result));
           const id = "custom-" + Date.now();
-          const pets = (cfg.customPets || []).concat([{ id, name: file.name.replace(/\.[^.]+$/, "") || "自定义", dataUrl: String(reader.result) }]);
+          const pets = (cfg.customPets || []).concat([{ id, name: file.name.replace(/\.[^.]+$/, "") || "自定义", dataUrl: processed.dataUrl }]);
           cfg.customPets = pets;
           cfg.petId = id;
           saveConfig();
           store.set({ customPets: pets });
           renderPet();
           applyVisual();
-          say("换上新形象啦～");
+          say(processed.removed ? "已去背景，换上新形象啦～" : "换上新形象啦～");
         };
         reader.readAsDataURL(file);
       }
@@ -563,16 +679,17 @@ window.__ModuleLoader__.load({
           if (blob.size > MAX_IMG) { say("图片太大了（≤3MB）～"); return; }
           if ((cfg.customPets || []).length >= MAX_CUSTOM) { say("自定义形象最多 3 个～"); return; }
           const reader = new FileReader();
-          reader.onload = () => {
+          reader.onload = async () => {
+            const processed = await processPetImage(String(reader.result));
             const id = "custom-" + Date.now();
-            const pets = (cfg.customPets || []).concat([{ id, name: (nameHint || raw.split("/").pop() || "自定义").replace(/\.[^.]+$/, "").slice(0, 18), dataUrl: String(reader.result) }]);
+            const pets = (cfg.customPets || []).concat([{ id, name: (nameHint || raw.split("/").pop() || "自定义").replace(/\.[^.]+$/, "").slice(0, 18), dataUrl: processed.dataUrl }]);
             cfg.customPets = pets;
             cfg.petId = id;
             saveConfig();
             store.set({ customPets: pets });
             renderPet();
             applyVisual();
-            say("换上新形象啦～");
+            say(processed.removed ? "已去背景，换上新形象啦～" : "换上新形象啦～");
           };
           reader.readAsDataURL(blob);
         } catch (e) {
@@ -642,7 +759,13 @@ window.__ModuleLoader__.load({
                 onChange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importPet(f); }
               }),
               h("button", { className: "dswp-btn dswp-btn-primary", onClick: () => fileRef.current && fileRef.current.click() }, "上传自定义形象"),
-              h("span", { className: "dswp-hint" }, "GIF/PNG/WebP ≤3MB，最多 3 个（自己的表情包也能当桌宠）")
+              h("span", { className: "dswp-hint" }, "GIF/PNG/WebP ≤3MB，最多 3 个；导入自动预处理（去背景/裁剪/缩放）")
+            ]),
+            row("自动去背景", "检测边框背景色并去除白底/纯色底，透明边自动裁剪，最大 512px", snap.removeBg, (e) => applyConfig({ removeBg: e.target.checked })),
+            h("div", { className: "dswp-row" }, [
+              h("span", { className: "dswp-label" }, "去背景容差"),
+              h("input", { className: "dswp-slider", type: "range", min: 12, max: 96, step: 4, value: snap.bgTolerance, onChange: (e) => applyConfig({ bgTolerance: Number(e.target.value) }) }),
+              h("span", { className: "dswp-hint" }, snap.bgTolerance)
             ]),
             h("div", { className: "dswp-row" }, [
               h("input", {
