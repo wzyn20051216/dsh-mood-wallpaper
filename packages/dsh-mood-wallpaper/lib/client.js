@@ -28,6 +28,17 @@
  *     完成时一声提示音；首次用户手势后启动，默认关闭
  *   - 性能治理：页面不可见暂停全部动画/音频；prefers-reduced-motion 降级
  *
+ * v4 新增「创作平台化」（本版）：
+ *   - 自适应性能档位：平均 FPS → 60/30/15 分档；电池供电降着色器分辨率；
+ *     高上下文压力/大量工具调用减非关键特效；WebGL 上下文丢失自动恢复；
+ *     设置页展示大致 GPU/CPU 开销
+ *   - 记忆星图：壁纸层记忆可视化（问题=恒星/决策·工具·注入=轨道节点/错误=红色脉冲/
+ *     固定记忆=金色星座，点击节点查看详情）
+ *   - 场景编排器 Scene Studio：可视化编排 + idle/thinking/tool/approval/error/done
+ *     状态预览 + scene.json 导出/导入 + 跨插件应用（dsh:scene 同步桌宠/HUD）
+ *   - 多 Agent 任务现场：后台任务光点舰船态势（运行沿轨道/等待批准琥珀停靠/
+ *     完成返回中心/失败故障波纹）
+ *
  * 兼容性：壁纸层独立 <div>（z-index:-1）+ 私有 <style>，类前缀 dswm-；
  * 主题覆盖走 ctx.theme.overrideTokens（source: dsh-mood-wallpaper）分层合成；
  * 状态输入来自当前会话 ConversationSnapshot（partial/runningCalls/turnTimings）。
