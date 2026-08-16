@@ -43,7 +43,9 @@ window.__ModuleLoader__.load({
       hudAutoHide: true,
       memory: true,
       hudPos: null,
-      minimal: false
+      minimal: false,
+      /** 氛围能量（0.3–2.0）：Composer 变阻器驱动壁纸强度。 */
+      energy: 1
     };
 
     function loadConfig() {
@@ -264,6 +266,57 @@ window.__ModuleLoader__.load({
         .dshhud-switch input:focus-visible ~ .dshhud-track { box-shadow: 0 0 0 2px var(--dsw-alias-brand-primary); }
         .dshhud-bar-wrap > i { background: var(--dshhud-accent, var(--dsw-alias-brand-primary, #4f83f2)); }
         .dshhud-accent-glow { box-shadow: 0 0 0 1px var(--dshhud-accent, transparent), 0 0 12px var(--dshhud-accent, transparent); }
+
+        /* ---- Composer 模式按钮 + 能量变阻器 ---- */
+        .dshhud-modes { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 28px; }
+        .dshhud-mode-btn {
+          box-sizing: border-box; height: 28px; min-width: 28px; padding: 0 6px; cursor: pointer;
+          display: inline-flex; align-items: center; justify-content: center;
+          background: var(--dsw-alias-bg-layer-2, #1f222b); color: var(--dsw-alias-label-secondary, #9ca3af);
+          border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.08)); border-radius: 8px;
+          font-size: 13px; line-height: 1; transition: color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .dshhud-mode-btn:hover { color: var(--dsw-alias-label-primary, #e5e7eb); border-color: var(--dsw-alias-border-l2); }
+        .dshhud-mode-btn.dshhud-on { color: #f59e0b; border-color: rgba(245,158,11,0.5); box-shadow: 0 0 10px rgba(245,158,11,0.35); }
+
+        .dshhud-rheostat {
+          position: absolute; right: 0; top: calc(100% + 8px); z-index: 9600; width: 230px;
+          padding: 12px 14px; border-radius: 12px;
+          background: color-mix(in srgb, var(--dsw-alias-bg-layer-2, #1f222b) 94%, transparent);
+          border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.12));
+          box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+          display: flex; flex-direction: column; gap: 10px;
+        }
+        .dshhud-rheostat-head { display: flex; align-items: center; justify-content: space-between; }
+        .dshhud-rheostat-title { font-size: 12px; color: var(--dsw-alias-label-secondary, #9ca3af); }
+        .dshhud-rheostat-val { font-size: 13px; font-weight: 600; color: var(--dsw-alias-label-primary, #e5e7eb); }
+        .dshhud-rheostat-track {
+          position: relative; height: 26px; cursor: ew-resize; touch-action: none;
+          border-radius: 13px; background: var(--dsw-alias-bg-layer-3, #14161d);
+          border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.08));
+          user-select: none; overflow: hidden;
+        }
+        .dshhud-rheostat-fill {
+          position: absolute; left: 0; top: 0; bottom: 0; border-radius: 13px 0 0 13px;
+          background: linear-gradient(90deg, rgba(79,131,242,0.25), var(--dshhud-accent, #4f83f2));
+          box-shadow: 0 0 14px var(--dshhud-accent, rgba(79,131,242,0.7));
+          transition: width 70ms linear;
+        }
+        .dshhud-rheostat-ticks { position: absolute; inset: 0; pointer-events: none; }
+        .dshhud-rheostat-ticks i {
+          position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.08);
+        }
+        .dshhud-rheostat-knob {
+          position: absolute; top: 50%; width: 18px; height: 18px; margin-top: -9px; border-radius: 50%;
+          background: #fff; border: 2px solid var(--dshhud-accent, #4f83f2);
+          box-shadow: 0 0 0 4px rgba(79,131,242,0.18), 0 2px 8px rgba(0,0,0,0.4);
+          transform: translateX(-50%); transition: left 70ms linear, box-shadow 0.2s ease;
+          pointer-events: none;
+        }
+        .dshhud-rheostat-knob::after {
+          content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
+          border-radius: 50%; background: var(--dshhud-accent, #4f83f2);
+        }
       `;
 
       // ================= HUD / 抽屉 DOM =================
@@ -1054,6 +1107,82 @@ window.__ModuleLoader__.load({
         { name: "settings.section", id: "ui-hud", order: 40, label: "状态 HUD · Memory" },
         () => h("div", { className: "dshhud-page" }, h(SettingsView))
       )), "dsh-ui-hud: settings section");
+
+      // ================= Composer 模式按钮 + 氛围能量变阻器 =================
+      function Rheostat({ onClose }) {
+        const MIN = 0.3, MAX = 2.0;
+        const [val, setVal] = React.useState(() => Number(cfg.energy) || 1);
+        const trackRef = React.useRef(null);
+        const valRef = React.useRef(Number(cfg.energy) || 1);
+
+        function valueFromClientX(clientX) {
+          const el = trackRef.current;
+          if (!el) return valRef.current;
+          const r = el.getBoundingClientRect();
+          const t = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+          return Math.round((MIN + t * (MAX - MIN)) * 100) / 100;
+        }
+        function applyVal(v) {
+          valRef.current = v;
+          setVal(v);
+          cfg.energy = v;
+          saveConfig();
+          store.set({ energy: v });
+          try { window.dispatchEvent(new CustomEvent("dsh:mood:energy", { detail: { intensity: v } })); } catch { /* ignore */ }
+        }
+        function onDown(e) {
+          e.preventDefault();
+          applyVal(valueFromClientX(e.clientX));
+          const move = (ev) => applyVal(valueFromClientX(ev.clientX));
+          const up = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", up);
+          };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", up);
+        }
+
+        const pct = ((val - MIN) / (MAX - MIN)) * 100;
+        const ticks = [];
+        for (let i = 0; i <= 10; i++) ticks.push(h("i", { key: i, style: { left: (i * 10) + "%" } }));
+
+        return h("div", { className: "dshhud-rheostat", onPointerDown: (e) => e.stopPropagation() }, [
+          h("div", { className: "dshhud-rheostat-head" }, [
+            h("span", { className: "dshhud-rheostat-title" }, "氛围能量 · 推理强度"),
+            h("span", { className: "dshhud-rheostat-val" }, val.toFixed(2) + "×"),
+            h("button", { className: "dshhud-mode-btn", onClick: onClose, style: { height: 20, minWidth: 20, padding: 0 } }, "×")
+          ]),
+          h("div", { className: "dshhud-rheostat-track", ref: trackRef, onPointerDown: onDown }, [
+            h("div", { className: "dshhud-rheostat-fill", style: { width: pct + "%" } }),
+            h("div", { className: "dshhud-rheostat-ticks" }, ticks),
+            h("div", { className: "dshhud-rheostat-knob", style: { left: pct + "%" } })
+          ])
+        ]);
+      }
+
+      function ComposerModes() {
+        const [snap, setSnap] = React.useState(store.get());
+        React.useEffect(() => store.subscribe(setSnap), []);
+        const [open, setOpen] = React.useState(false);
+        return h("div", { className: "dshhud-modes" }, [
+          h("button", {
+            className: "dshhud-mode-btn" + (snap.minimal ? " dshhud-on" : ""),
+            title: "极简模式（Ctrl+Shift+X）",
+            onClick: () => toggleMinimal()
+          }, snap.minimal ? "🌙" : "👁"),
+          h("button", {
+            className: "dshhud-mode-btn" + (open ? " dshhud-on" : ""),
+            title: "氛围能量（调节壁纸强度）",
+            onClick: () => setOpen(!open)
+          }, "🎚️"),
+          open ? h(Rheostat, { onClose: () => setOpen(false) }) : null
+        ]);
+      }
+
+      ctx.effect(() => ctx.slots.inject("conversation.input.left", () => ctx.slots.register(
+        { name: "conversation.input.left", id: "ui-hud-modes", order: 0, label: "氛围控制" },
+        () => h(ComposerModes)
+      )), "dsh-ui-hud: composer modes");
 
       // ================= 启动 =================
       refresh();
