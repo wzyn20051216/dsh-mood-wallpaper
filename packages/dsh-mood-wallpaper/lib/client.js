@@ -71,7 +71,8 @@ window.__ModuleLoader__.load({
         keysound: false,
         alerts: true,
         whale: true,
-        glass: false
+        glass: false,
+        starmap: true
       },
       analysis: {},
       /** 性能档位策略：auto（按平均 FPS 自动）| 60 | 30 | 15（手动锁定）。 */
@@ -106,6 +107,27 @@ window.__ModuleLoader__.load({
       if (n.includes("workflow")) return "🔀";
       if (n.includes("edit") || n.includes("write")) return "✏️";
       return "⚙️";
+    }
+
+    /** 从快照 content/block 结构抽取纯文本。 */
+    function contentText(c) {
+      if (!c) return "";
+      if (typeof c === "string") return c;
+      if (Array.isArray(c)) return c.map((b) => (b && b.text) || "").join(" ");
+      if (typeof c === "object" && c.text) return c.text;
+      return "";
+    }
+    function shortText(s, n) {
+      const t = (s || "").replace(/\s+/g, " ").trim();
+      return t.length > n ? t.slice(0, n - 1) + "…" : t;
+    }
+    function hexToRgba(hex, a) {
+      try {
+        const n = parseInt(hex.slice(1), 16);
+        return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + a + ")";
+      } catch {
+        return "rgba(56,189,248," + a + ")";
+      }
     }
 
     /** 场景皮肤：一键应用「壁纸 + 风格 + 特效 + 透明度」组合（皮肤中心轻量版）。 */
@@ -391,6 +413,26 @@ window.__ModuleLoader__.load({
           background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(0,0,0,var(--dswm-vig, 0.32)) 100%);
           opacity: 1;
         }
+        /* ---- 记忆星图（壁纸层记忆可视化） ---- */
+        #dswm-wall .dswm-star {
+          position: absolute; inset: 0; width: 100%; height: 100%;
+          pointer-events: auto; cursor: crosshair; opacity: 0.9;
+        }
+        .dswm-star-pop {
+          position: fixed; z-index: 9000; max-width: 340px;
+          padding: 10px 12px; border-radius: 12px;
+          background: color-mix(in srgb, var(--dsw-alias-bg-layer-2, #1f222b) 92%, transparent);
+          border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.12));
+          box-shadow: 0 8px 26px rgba(0,0,0,0.35);
+          color: var(--dsw-alias-label-primary, #e5e7eb);
+          font-size: 12px; line-height: 18px; pointer-events: auto;
+        }
+        .dswm-star-pop .dswm-star-pop-title { font-weight: 600; margin-bottom: 4px; }
+        .dswm-star-pop .dswm-star-pop-text {
+          color: var(--dsw-alias-label-secondary, #9ca3af);
+          word-break: break-word; max-height: 120px; overflow: auto;
+        }
+        .dswm-star-pop .dswm-star-pop-sub { color: var(--dsw-alias-label-secondary, #9ca3af); margin-top: 6px; font-size: 11px; }
         #dswm-wall .dswm-sweep {
           position: absolute; left: 0; top: -15%; bottom: -15%; width: 45%;
           background: linear-gradient(90deg, transparent, var(--dswm-accent, rgba(125,211,252,0.30)), transparent);
@@ -662,6 +704,7 @@ window.__ModuleLoader__.load({
         '<div class="dswm-media"></div>' +
         '<div class="dswm-glow"></div>' +
         '<div class="dswm-vignette"></div>' +
+        '<canvas class="dswm-star"></canvas>' +
         '<div class="dswm-sweep"></div>' +
         '<div class="dswm-flash"></div>' +
         '<div class="dswm-ring"></div>' +
@@ -678,6 +721,8 @@ window.__ModuleLoader__.load({
       const glowEl = wallEl.querySelector(".dswm-glow");
       const canvas = wallEl.querySelector(".dswm-canvas");
       const pctx = canvas.getContext("2d");
+      const starCanvas = wallEl.querySelector(".dswm-star");
+      const sctx = starCanvas.getContext("2d");
 
       /** 代码雨列（resizeCanvas 在初始化阶段即调用 initRain，故提前声明）。 */
       let rain = [];
@@ -691,6 +736,9 @@ window.__ModuleLoader__.load({
         canvas.style.width = innerWidth + "px";
         canvas.style.height = innerHeight + "px";
         pctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        starCanvas.width = canvas.width;
+        starCanvas.height = canvas.height;
+        sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         initRain();
         resizeShader();
       }
@@ -1702,6 +1750,14 @@ window.__ModuleLoader__.load({
           return;
         }
         lastParticleRender = now;
+
+        // 记忆星图（独立画布，低档/减少动态时隐藏）
+        if (cfg.fx && cfg.fx.starmap && !reducedMotion && perf.tier !== "low") {
+          drawStarMap(now);
+        } else {
+          sctx.clearRect(0, 0, innerWidth, innerHeight);
+        }
+
         pctx.clearRect(0, 0, innerWidth, innerHeight);
 
         // 鼠标视差平滑（非关键特效：高压/低档时关闭）
@@ -1882,6 +1938,185 @@ window.__ModuleLoader__.load({
         if (alertState) setAlert(null);
       }
 
+      // ================= 记忆星图（壁纸层记忆可视化） =================
+      // 用户问题=恒星；决策/工具调用/上下文注入=轨道节点；错误=红色脉冲点；
+      // 被固定记忆=金色星座连线；点击节点查看详情。
+      const PINS_KEY = "dsh-ui-hud.pins";
+      let memoryGraph = { stars: [], orbits: [], errors: [] };
+      let starPositions = [];
+      let starPop = null;
+
+      function loadPins() {
+        try {
+          const raw = localStorage.getItem(PINS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          return Array.isArray(arr) ? arr : [];
+        } catch {
+          return [];
+        }
+      }
+
+      function buildMemoryGraph(snap) {
+        const stars = [], orbits = [], errors = [];
+        const pins = loadPins();
+        const pinSeqs = new Set(pins.map((p) => p.seq));
+        if (snap && snap.nodes) {
+          for (const n of snap.nodes) {
+            if (n.kind === "user") {
+              const text = contentText(n.content);
+              if (text) stars.push({ seq: n.seq, text: shortText(text, 90), isPin: pinSeqs.has(n.seq) });
+            } else if (n.kind === "tool-result") {
+              const name = (n.call && n.call.name) || n.callId || "工具";
+              const text = shortText(contentText(n.content), 90);
+              if (n.isError) errors.push({ seq: n.seq, name: "⚠️ " + name, text });
+              else orbits.push({ seq: n.seq, kind: "tool", name, text, isPin: pinSeqs.has(n.seq) });
+            } else if (n.kind === "assistant") {
+              const text = shortText((n.blocks || []).map((b) => (b.text || "")).join(" "), 90);
+              if (text) orbits.push({ seq: n.seq, kind: "decision", name: "决策", text, isPin: pinSeqs.has(n.seq) });
+            } else if (n.kind === "context") {
+              const prov = n.provenance;
+              const name = (prov && (prov.role || prov.producerName)) || "注入";
+              orbits.push({ seq: n.seq, kind: "context", name: "📥 " + name, text: shortText(contentText(n.content), 90), isPin: pinSeqs.has(n.seq) });
+            } else if (n.kind === "turn-error") {
+              errors.push({ seq: n.seq, name: "⚠️ 回合错误", text: shortText(n.message || "", 90) });
+            }
+          }
+        }
+        memoryGraph = {
+          stars: stars.slice(-6),
+          orbits: orbits.slice(-30),
+          errors: errors.slice(-8)
+        };
+      }
+
+      function computeStarLayout(now) {
+        const cx = innerWidth * 0.5, cy = innerHeight * 0.42;
+        const t = now / 1000;
+        const positions = [];
+        const g = memoryGraph;
+        const ringBase = Math.max(84, innerWidth * 0.14);
+        if (g.stars.length > 0) {
+          const last = g.stars[g.stars.length - 1];
+          positions.push({ type: "star", seq: last.seq, x: cx, y: cy, r: 13 + 3 * Math.sin(t * 0.7), name: "问题", text: last.text, isPin: last.isPin });
+        }
+        g.orbits.forEach((o, i) => {
+          const ring = ringBase + Math.floor(i / 10) * 52;
+          const angle = (i / Math.max(1, g.orbits.length)) * Math.PI * 2 + t * 0.04;
+          positions.push({
+            type: o.kind, seq: o.seq,
+            x: cx + Math.cos(angle) * ring,
+            y: cy + Math.sin(angle) * ring * 0.55,
+            r: o.kind === "tool" ? 4 : 3.4,
+            name: o.name, text: o.text, isPin: o.isPin
+          });
+        });
+        g.errors.forEach((e, i) => {
+          const angle = (i / Math.max(1, g.errors.length)) * Math.PI * 2 + Math.PI + t * 0.09;
+          positions.push({
+            type: "error", seq: e.seq,
+            x: cx + Math.cos(angle) * (ringBase + 88),
+            y: cy + Math.sin(angle) * (ringBase + 88) * 0.5,
+            r: 3 + 1.5 * (0.5 + 0.5 * Math.sin(t * 4 + i)),
+            name: e.name, text: e.text
+          });
+        });
+        return positions;
+      }
+
+      function drawStarMap(now) {
+        sctx.clearRect(0, 0, innerWidth, innerHeight);
+        const g = memoryGraph;
+        if (g.stars.length + g.orbits.length + g.errors.length === 0) return;
+        const positions = computeStarLayout(now);
+        starPositions = positions;
+        const c1 = currentColors[0] || "#38bdf8";
+        const c2 = currentColors[1] || "#a78bfa";
+        sctx.save();
+        sctx.globalCompositeOperation = "lighter";
+        // 被固定记忆：金色星座连线
+        const pinned = positions.filter((p) => p.isPin);
+        if (pinned.length > 1) {
+          sctx.strokeStyle = "rgba(245,158,11,0.30)";
+          sctx.lineWidth = 1;
+          sctx.beginPath();
+          pinned.forEach((p, i) => { if (i === 0) sctx.moveTo(p.x, p.y); else sctx.lineTo(p.x, p.y); });
+          const star = positions.find((p) => p.type === "star");
+          if (star) sctx.lineTo(star.x, star.y);
+          sctx.stroke();
+        }
+        for (const p of positions) {
+          if (p.type === "star") {
+            const grad = sctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3.4);
+            grad.addColorStop(0, "rgba(255,255,255,0.95)");
+            grad.addColorStop(0.3, hexToRgba(c1, 0.5));
+            grad.addColorStop(1, "rgba(0,0,0,0)");
+            sctx.fillStyle = grad;
+            sctx.beginPath(); sctx.arc(p.x, p.y, p.r * 3.4, 0, Math.PI * 2); sctx.fill();
+            sctx.fillStyle = "#fff";
+            sctx.beginPath(); sctx.arc(p.x, p.y, p.r * 0.5, 0, Math.PI * 2); sctx.fill();
+          } else if (p.type === "error") {
+            sctx.fillStyle = "rgba(239,68,68,0.9)";
+            sctx.beginPath(); sctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); sctx.fill();
+            sctx.strokeStyle = "rgba(239,68,68,0.5)";
+            sctx.lineWidth = 1;
+            sctx.beginPath(); sctx.arc(p.x, p.y, p.r + 3 + 2 * Math.sin(now / 220), 0, Math.PI * 2); sctx.stroke();
+          } else {
+            const col = p.type === "tool" ? hexToRgba(c1, 0.9) : p.type === "context" ? hexToRgba(c2, 0.9) : "rgba(167,139,250,0.9)";
+            if (p.isPin) {
+              sctx.strokeStyle = "rgba(245,158,11,0.9)";
+              sctx.lineWidth = 1.4;
+              sctx.beginPath(); sctx.arc(p.x, p.y, p.r + 2.5, 0, Math.PI * 2); sctx.stroke();
+            }
+            sctx.fillStyle = col;
+            sctx.beginPath(); sctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); sctx.fill();
+          }
+        }
+        sctx.restore();
+      }
+
+      // 点击节点 → 详情气泡
+      function showStarPop(p, x, y) {
+        closeStarPop();
+        const pop = document.createElement("div");
+        pop.className = "dswm-star-pop";
+        const title = document.createElement("div");
+        title.className = "dswm-star-pop-title";
+        title.textContent = p.name || (p.type === "star" ? "问题" : p.type);
+        const text = document.createElement("div");
+        text.className = "dswm-star-pop-text";
+        text.textContent = p.text || "（无文本）";
+        const sub = document.createElement("div");
+        sub.className = "dswm-star-pop-sub";
+        sub.textContent = (p.type === "star" ? "🌟 恒星" : p.type === "error" ? "🔴 错误脉冲" : p.type === "tool" ? "🔧 工具调用" : p.type === "context" ? "📥 上下文注入" : "✦ 决策节点") + " · seq " + p.seq + (p.isPin ? " · ★已固定" : "");
+        pop.appendChild(title);
+        pop.appendChild(text);
+        pop.appendChild(sub);
+        document.body.appendChild(pop);
+        const pw = pop.offsetWidth, ph = pop.offsetHeight;
+        pop.style.left = Math.max(8, Math.min(innerWidth - pw - 8, x - pw / 2)) + "px";
+        pop.style.top = Math.max(8, Math.min(innerHeight - ph - 8, y - ph - 16)) + "px";
+        starPop = pop;
+        setTimeout(() => { if (starPop === pop) closeStarPop(); }, 5000);
+      }
+      function closeStarPop() {
+        if (starPop && starPop.parentNode) starPop.parentNode.removeChild(starPop);
+        starPop = null;
+      }
+      function onStarClick(e) {
+        if (!cfg.fx || !cfg.fx.starmap) return;
+        const rect = starCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+        let best = null, bestD = 16;
+        for (const p of starPositions) {
+          const d = Math.hypot(p.x - x, p.y - y);
+          if (d < bestD) { bestD = d; best = p; }
+        }
+        if (best) showStarPop(best, e.clientX, e.clientY);
+        else closeStarPop();
+      }
+      starCanvas.addEventListener("click", onStarClick);
+      disposables.push(() => { starCanvas.removeEventListener("click", onStarClick); closeStarPop(); });
+
       // ================= 状态机：idle / thinking / done =================
       let machineState = "idle";
       let wasActive = false;
@@ -1917,6 +2152,7 @@ window.__ModuleLoader__.load({
         perf.pressure = readPressure();
         perf.toolLoad = snap && snap.runningCalls ? snap.runningCalls.length : 0;
         applyPerf();
+        buildMemoryGraph(snap);
         if (!cfg.enabled) {
           setMachine("idle");
           wasActive = isActive(snap);
@@ -2328,7 +2564,13 @@ window.__ModuleLoader__.load({
               checked: snap.fx.glass,
               onChange: (e) => setFx("glass", e.target.checked)
             }),
-            h("div", { className: "dswm-hint" }, "页面不可见时自动暂停全部动画/音频；系统开启「减少动态效果」时自动降级。")
+            FxToggle({
+              label: "记忆星图",
+              hint: "壁纸层记忆可视化：问题=恒星、决策/工具/注入=轨道节点、错误=红色脉冲、固定记忆=金色星座，点击节点看详情",
+              checked: snap.fx.starmap,
+              onChange: (e) => setFx("starmap", e.target.checked)
+            }),
+            h("div", { className: "dswm-hint" }, "页面不可见时自动暂停全部动画/音频；系统开启「减少动态效果」时自动降级；性能低档时记忆星图自动隐藏。")
           ]),
 
           h("div", { className: "dswm-card" }, [
