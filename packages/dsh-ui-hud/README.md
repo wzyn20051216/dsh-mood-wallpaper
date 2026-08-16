@@ -67,6 +67,15 @@
 
 `Ctrl+Shift+X` 或设置页开关「极简模式」：HUD 作为中枢向全家桶广播 `dsh:minimal` 事件——壁纸引擎切「静默极简」皮肤（特效全收敛）、桌宠临时隐藏，只剩安静背景专注会话；再按一次全部恢复（不改变各插件用户设置）。
 
+### 6️⃣ Composer 模型选择器 + 推理强度变阻器
+
+接管 DSH 原生 `conversation.input.model` 席位（`priority: -1` 遮蔽原生 ModelSelect），在输入框右侧渲染：
+
+- **模型列表**：从 `ctx.modelDirectories` 读取 provider → 模型，点选即切换（与 `/model` 弹窗共享同一状态）
+- **推理强度变阻器**：把模型的 `reasoning.efforts`（离散档位，如低/中/高）做成**档位式变阻器**——刻度 + 发光填充 + 可拖动旋钮，拖动吸附到最近档位
+- **壁纸联动**：调节变阻器时广播 `dsh:mood:energy`，[dsh-mood-wallpaper](https://github.com/wzyn20051216/dsh-mood-wallpaper) 同步调整动效强度并播放粒子脉冲
+- **会话锁定**：尊重原生 `locked`（会话被移除时按钮置灰）；子代理会话自动禁用选择
+
 ## 🚀 安装（一条命令）
 
 ```powershell
@@ -133,7 +142,7 @@ dsh-ui-hud/
 ├── docs/            # 演示视频与截图
 └── lib/
     ├── index.js     # host 半边（空激活载体）
-    └── client.js    # 浏览器半边：HUD + 拖拽 + 记忆抽屉 + 快捷键 + 设置页
+    └── client.js    # 浏览器半边：HUD + 拖拽 + 记忆抽屉 + 快捷键 + 设置页 + Composer 模型选择器/推理强度变阻器
 ```
 
 ## 🔌 兼容性
