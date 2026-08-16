@@ -1208,6 +1208,8 @@ window.__ModuleLoader__.load({
           try { dir = md.directoryFor(sid); } catch { setDirState(null); return; }
           const unsub = dir.store.subscribe(() => setDirState(dir.store.getSnapshot()));
           setDirState(dir.store.getSnapshot());
+          // 关键：目录不会自动加载，首次需手动 load 才有 current/groups
+          dir.load().catch(() => {});
           return unsub;
         }, [md, sid]);
 
@@ -1225,7 +1227,17 @@ window.__ModuleLoader__.load({
         };
 
         return h("div", { className: "dshhud-models" }, [
-          h("button", { className: "dshhud-model-trigger", disabled: locked, title: "模型与推理强度", onClick: () => setOpen(!open) }, [
+          h("button", {
+            className: "dshhud-model-trigger",
+            disabled: locked,
+            title: "模型与推理强度",
+            onClick: () => {
+              if (!open) {
+                try { if (md && sid) md.directoryFor(sid).load().catch(() => {}); } catch { /* ignore */ }
+              }
+              setOpen(!open);
+            }
+          }, [
             h("span", { className: "dshhud-model-name" }, model ? model.name : (current && current.model) || "模型"),
             current && current.reasoningEffort
               ? h("span", { className: "dshhud-model-effort" }, ((efforts.find((e) => e.id === current.reasoningEffort) || {}).name) || current.reasoningEffort)
