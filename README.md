@@ -8,6 +8,7 @@
 |---|---|---|
 | 🌌 **dsh-mood-wallpaper** | 壁纸感知动态壁纸引擎 | 壁纸随 agent 状态起舞：后台分析、状态机动效、WebGL 着色器、鲸鱼巡游、场景皮肤 |
 | 🧠 **dsh-ui-hud** | 状态 HUD + 记忆中心 | 可拖动状态栏（模型/token/上下文压力/实时吞吐）+ 四类记忆可视化面板 |
+| 🐋 **dsh-whale-pet** | 自研鲸鱼桌宠 | 独立悬浮、可拖动、随状态联动（思考游动/完成跃水）、点击互动冒泡说话 |
 
 [![version](https://img.shields.io/github/v/tag/wzyn20051216/dsh-mood-wallpaper?color=4f83f2&label=version)](https://github.com/wzyn20051216/dsh-mood-wallpaper/releases)
 [![license](https://img.shields.io/github/license/wzyn20051216/dsh-mood-wallpaper?color=34d399)](LICENSE)
@@ -30,22 +31,24 @@
 
 ```
 dsh-mood-wallpaper/                    # 全家桶仓库（monorepo）
-├── install.ps1                        # 一键安装两个插件
+├── install.ps1                        # 一键安装三个插件
 ├── packages/
 │   ├── dsh-mood-wallpaper/            # 🌌 壁纸引擎（自述见 packages/dsh-mood-wallpaper/README.md）
-│   └── dsh-ui-hud/                    # 🧠 状态 HUD + 记忆中心（自述见 packages/dsh-ui-hud/README.md）
+│   ├── dsh-ui-hud/                    # 🧠 状态 HUD + 记忆中心（自述见 packages/dsh-ui-hud/README.md）
+│   └── dsh-whale-pet/                 # 🐋 自研鲸鱼桌宠（自述见 packages/dsh-whale-pet/README.md）
 ```
 
 ## 🚀 安装（一条命令装两个）
 
 ```powershell
-# 一键脚本（推荐）：克隆仓库 + 装两个插件（link: 安装，改源码重启即生效）
+# 一键脚本（推荐）：克隆仓库 + 装三个插件（link: 安装，改源码重启即生效）
 irm https://raw.githubusercontent.com/wzyn20051216/dsh-mood-wallpaper/master/install.ps1 | iex
 
-# 或手动（等价的四条命令）
-git clone --depth 1 https://github.com/wzyn20051216/dsh-mood-wallpaper $env:TEMP\dsh-mood-wallpaper-all
-dsh plugin --profile web add "$env:TEMP\dsh-mood-wallpaper-all\packages\dsh-mood-wallpaper"
-dsh plugin --profile web add "$env:TEMP\dsh-mood-wallpaper-all\packages\dsh-ui-hud"
+# 或手动（等价的五条命令）
+git clone --depth 1 https://github.com/wzyn20051216/dsh-mood-wallpaper $env:USERPROFILE\dsh-mood-wallpaper-all
+dsh plugin --profile web add "$env:USERPROFILE\dsh-mood-wallpaper-all\packages\dsh-mood-wallpaper"
+dsh plugin --profile web add "$env:USERPROFILE\dsh-mood-wallpaper-all\packages\dsh-ui-hud"
+dsh plugin --profile web add "$env:USERPROFILE\dsh-mood-wallpaper-all\packages\dsh-whale-pet"
 ```
 
 安装后**重启 `dsh web`** 生效。卸载：
@@ -53,6 +56,7 @@ dsh plugin --profile web add "$env:TEMP\dsh-mood-wallpaper-all\packages\dsh-ui-h
 ```bash
 dsh plugin --profile web remove dsh-mood-wallpaper
 dsh plugin --profile web remove dsh-ui-hud
+dsh plugin --profile web remove dsh-whale-pet
 ```
 
 > 无需 npm；`link:` 安装意味着升级 = 重新跑一遍脚本（或 `git -C $env:TEMP\dsh-mood-wallpaper-all pull` 后重启）。
@@ -74,6 +78,12 @@ dsh plugin --profile web remove dsh-ui-hud
 > 完整功能与使用指南：[packages/dsh-ui-hud/README.md](packages/dsh-ui-hud/README.md)
 
 **快速上手**：右下角悬浮条 → 按住可拖到任意位置 → 点「📖 记忆」或 `Ctrl+Shift+M` 打开记忆抽屉 → 点抽屉外任意处收起。
+
+## 🐋 插件三：dsh-whale-pet（自研鲸鱼桌宠）
+
+独立悬浮鲸鱼（默认右下角上方）：按住拖动、双击缩放、点击冒泡说话；空闲漂浮、**思考时快速游动**、**完成时跃水庆祝**。快捷键 `Ctrl+Shift+W` 显示/隐藏。
+
+> 完整功能：[packages/dsh-whale-pet/README.md](packages/dsh-whale-pet/README.md)
 
 ## 🔗 跨插件联动
 

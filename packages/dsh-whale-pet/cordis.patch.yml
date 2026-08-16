@@ -1,0 +1,4 @@
+# dsh-whale-pet profile patch layer — insert one loader entry.
+- insert:
+    - id: whale-pet
+      name: 'dsh-whale-pet'

@@ -1,0 +1,55 @@
+{
+  "name": "dsh-whale-pet",
+  "version": "0.1.0",
+  "description": "DSH 自研鲸鱼桌宠：独立悬浮、可拖动、随 agent 状态联动（思考游动/完成跃水）、点击互动冒泡说话，纯原创。",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "pet",
+    "whale",
+    "mascot",
+    "web-ui"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wzyn20051216/dsh-mood-wallpaper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wzyn20051216/dsh-mood-wallpaper/issues"
+  },
+  "homepage": "https://github.com/wzyn20051216/dsh-mood-wallpaper/tree/master/packages/dsh-whale-pet",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-theme",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-client-runtime": "^0.1.0-rc.6"
+  }
+}

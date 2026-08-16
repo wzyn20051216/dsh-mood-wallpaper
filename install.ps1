@@ -3,8 +3,8 @@
 # 用法（一行）：
 #   irm https://raw.githubusercontent.com/wzyn20051216/dsh-mood-wallpaper/master/install.ps1 | iex
 #
-# 作用：克隆全家桶仓库，把两个插件（壁纸引擎 + 状态 HUD/记忆中心）以本地目录
-#       方式装进你的 DSH web profile（link: 安装，改源码重启即生效），无需 npm。
+# 作用：克隆全家桶仓库，把三个插件（壁纸引擎 + 状态 HUD/记忆中心 + 鲸鱼桌宠）
+#       以本地目录方式装进你的 DSH web profile（link: 安装，改源码重启即生效），无需 npm。
 # 要求：已安装 DSH（dsh 命令可用）、git、网络可达 GitHub。
 
 param(
@@ -43,9 +43,9 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# 4) 安装两个插件（本地目录 link:）
+# 4) 安装三个插件（本地目录 link:）
 Write-Host "[3/4] 安装插件到 profile '$ProfileName' ..." -ForegroundColor Cyan
-dsh plugin --profile $ProfileName add "$TMP\packages\dsh-mood-wallpaper" "$TMP\packages\dsh-ui-hud"
+dsh plugin --profile $ProfileName add "$TMP\packages\dsh-mood-wallpaper" "$TMP\packages\dsh-ui-hud" "$TMP\packages\dsh-whale-pet"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[错误] 插件安装失败，退出码 $LASTEXITCODE" -ForegroundColor Red
     exit 1
@@ -61,5 +61,6 @@ Write-Host ""
 Write-Host "卸载：" -ForegroundColor Gray
 Write-Host "  dsh plugin --profile $ProfileName remove dsh-mood-wallpaper"
 Write-Host "  dsh plugin --profile $ProfileName remove dsh-ui-hud"
+Write-Host "  dsh plugin --profile $ProfileName remove dsh-whale-pet"
 Write-Host ""
 Write-Host "升级：重新运行本脚本（会重新克隆并覆盖 link 指向的目录）。"
