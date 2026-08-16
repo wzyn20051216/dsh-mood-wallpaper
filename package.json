@@ -1,7 +1,7 @@
 {
   "name": "dsh-mood-wallpaper",
-  "version": "0.5.0",
-  "description": "DSH 壁纸感知动态壁纸引擎 v5：导入动态壁纸 + WebGL 着色器壁纸；后台分析；状态机 idle/thinking/done + 警报氛围层（错误红色脉冲/待命琥珀光）+ token 速率驱动粒子；敲击能量场、思维投影、代码雨、CRT、昼夜、视差尾迹、键盘乐章、环境音。",
+  "version": "0.6.0",
+  "description": "DSH 壁纸感知动态壁纸引擎 v6：导入动态壁纸 + 自定义文件夹（非系统盘）+ WebGL 着色器壁纸（含深海）+ 鲸鱼巡游彩蛋；后台分析；状态机 idle/thinking/done + 警报氛围 + token 速率驱动；11 项特效可调。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
