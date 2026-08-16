@@ -37,7 +37,15 @@ window.__ModuleLoader__.load({
       /** 导入图片时自动去除背景（白底/纯色底 → 透明）。 */
       removeBg: true,
       /** 去背景颜色容差（越大去除越多）。 */
-      bgTolerance: 34
+      bgTolerance: 34,
+      /** 跟随鼠标（桌宠缓慢漂向光标，可拖动打断）。 */
+      followMouse: false,
+      /** 自定义台词（追加到内置台词之后）。 */
+      customLines: [],
+      /** 自定义音效（dataURL）。 */
+      customSounds: [],
+      /** 当前激活音效 id（点击/完成时播放）。 */
+      activeSoundId: null
     };
 
     const LINES = [
@@ -178,6 +186,14 @@ window.__ModuleLoader__.load({
           border-radius: 12px; background: rgba(255,255,255,0.06);
           -webkit-user-drag: none; user-drag: none; /* 禁止原生图片拖拽，避免干扰桌宠拖动 */
         }
+        /* ---- 精灵图动画（GIF 去背景后转成的横向帧条） ---- */
+        #dswp-whale .dswp-sprite { width: 100%; overflow: hidden; line-height: 0; }
+        #dswp-whale .dswp-sprite img {
+          display: block; height: 100%; width: auto;
+          filter: drop-shadow(0 4px 18px rgba(0,0,0,0.25));
+          animation: dswpSprite 1s steps(1) infinite;
+        }
+        @keyframes dswpSprite { to { transform: translateX(var(--dswp-sprite-dx, -100%)); } }
         #dswp-whale svg { filter: drop-shadow(0 4px 18px rgba(45,212,191,0.35)); }
 
         /* ---- 通用浮动 ---- */
@@ -349,12 +365,27 @@ window.__ModuleLoader__.load({
           wrap.innerHTML = p.svg;
           pet.appendChild(wrap.firstChild);
         } else if (p && p.dataUrl) {
-          const img = document.createElement("img");
-          img.className = "dswp-img";
-          img.src = p.dataUrl;
-          img.alt = p.name || "桌宠";
-          img.draggable = false;
-          pet.appendChild(img);
+          if (p.frames > 1 && p.fw > 0 && p.fh > 0) {
+            // 精灵图动画（去背景后的 GIF）
+            const box = document.createElement("div");
+            box.className = "dswp-sprite";
+            box.style.aspectRatio = p.fw + "/" + p.fh;
+            box.style.setProperty("--dswp-sprite-dx", "-" + (((p.frames - 1) / p.frames) * 100).toFixed(4) + "%");
+            const img = document.createElement("img");
+            img.src = p.dataUrl;
+            img.alt = p.name || "桌宠";
+            img.draggable = false;
+            img.style.animation = "dswpSprite " + (Math.max(40, (p.delay || 100) * p.frames)) + "ms steps(" + p.frames + ") infinite";
+            box.appendChild(img);
+            pet.appendChild(box);
+          } else {
+            const img = document.createElement("img");
+            img.className = "dswp-img";
+            img.src = p.dataUrl;
+            img.alt = p.name || "桌宠";
+            img.draggable = false;
+            pet.appendChild(img);
+          }
         } else {
           const wrap = document.createElement("span");
           wrap.innerHTML = BUILTIN_PETS.whale.svg;
@@ -409,7 +440,8 @@ window.__ModuleLoader__.load({
         if (m === "thinking") pet.classList.add("dswp-thinking");
         else if (m === "done") {
           pet.classList.add("dswp-done");
-          if (cfg.talk) say(LINES[Math.floor(Math.random() * LINES.length)]);
+          if (cfg.talk) say(randomLine());
+          playActiveSound();
         }
         store.set({ machine: m });
       }
@@ -444,6 +476,24 @@ window.__ModuleLoader__.load({
         setTimeout(() => { if (bubble.parentNode) bubble.parentNode.removeChild(bubble); }, 3500);
       }
 
+      function randomLine() {
+        const pool = LINES.concat(cfg.customLines || []);
+        return pool[Math.floor(Math.random() * pool.length)] || LINES[0];
+      }
+
+      function currentSound() {
+        return (cfg.customSounds || []).find((s) => s.id === cfg.activeSoundId) || null;
+      }
+      function playActiveSound() {
+        const s = currentSound();
+        if (!s || !s.dataUrl) return;
+        try {
+          const a = new Audio(s.dataUrl);
+          a.volume = 0.7;
+          a.play().catch(() => { /* 自动播放被拦截时静默 */ });
+        } catch (e) { /* ignore */ }
+      }
+
       function spawnBubbles(n) {
         const r = pet.getBoundingClientRect();
         for (let i = 0; i < n; i++) {
@@ -460,8 +510,9 @@ window.__ModuleLoader__.load({
       }
 
       pet.addEventListener("click", () => {
-        say(LINES[Math.floor(Math.random() * LINES.length)]);
+        say(randomLine());
         spawnBubbles(5);
+        playActiveSound();
       });
       pet.addEventListener("dblclick", () => {
         cfg.size = cfg.size >= 170 ? 90 : cfg.size + 40;
@@ -489,6 +540,55 @@ window.__ModuleLoader__.load({
       });
       pet.addEventListener("pointerup", () => { dragState = null; saveConfig(); });
       pet.addEventListener("pointercancel", () => { dragState = null; });
+
+      // ---- 跟随鼠标（缓慢漂向光标，拖动时暂停） ----
+      let mouseX = innerWidth * 0.72, mouseY = innerHeight * 0.5;
+      let followRaf = null;
+      function onPointerMoveFollow(e) {
+        if (cfg.followMouse && !dragState) { mouseX = e.clientX; mouseY = e.clientY; }
+      }
+      window.addEventListener("pointermove", onPointerMoveFollow);
+      disposables.push(() => window.removeEventListener("pointermove", onPointerMoveFollow));
+      function followLoop() {
+        if (cfg.followMouse && !dragState && cfg.visible && !document.hidden) {
+          const r = pet.getBoundingClientRect();
+          const tx = Math.max(0, Math.min(innerWidth - r.width, mouseX - r.width * 0.55));
+          const ty = Math.max(0, Math.min(innerHeight - r.height, mouseY - r.height * 0.2));
+          const nx = r.left + (tx - r.left) * 0.06;
+          const ny = r.top + (ty - r.top) * 0.06;
+          pet.style.left = nx + "px";
+          pet.style.top = ny + "px";
+          pet.style.right = "auto";
+          pet.style.bottom = "auto";
+        }
+        followRaf = requestAnimationFrame(followLoop);
+      }
+      followRaf = requestAnimationFrame(followLoop);
+      disposables.push(() => { if (followRaf) cancelAnimationFrame(followRaf); });
+
+      // ---- 自定义音效导入/播放 ----
+      function importSound(file) {
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) { say("音频太大了（≤2MB）～"); return; }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const id = "sound-" + Date.now();
+          const sounds = (cfg.customSounds || []).concat([{ id, name: file.name.replace(/\.[^.]+$/, "") || "音效", dataUrl: String(reader.result) }]).slice(0, 5);
+          cfg.customSounds = sounds;
+          cfg.activeSoundId = id;
+          saveConfig();
+          store.set({ customSounds: sounds, activeSoundId: id });
+          say("音效已就绪，点我试试～");
+        };
+        reader.readAsDataURL(file);
+      }
+      function removeSound(id) {
+        const sounds = (cfg.customSounds || []).filter((s) => s.id !== id);
+        cfg.customSounds = sounds;
+        if (cfg.activeSoundId === id) cfg.activeSoundId = null;
+        saveConfig();
+        store.set({ customSounds: sounds, activeSoundId: cfg.activeSoundId });
+      }
 
       // 快捷键 Ctrl+Shift+W
       function onKeyDown(e) {
@@ -534,9 +634,13 @@ window.__ModuleLoader__.load({
       // 采样边框主色 → 颜色键去背景（含羽化边缘）→ 裁剪透明边界 → 限制最大边长。
       function processPetImage(dataUrl) {
         return new Promise((resolve) => {
-          // GIF 保持逐帧动画，跳过逐像素去背景（避免丢帧）
+          // GIF：去背景并保持动画 → 解码帧 → 精灵图（横向帧条 PNG）
           if (/^data:image\/gif/i.test(dataUrl)) {
-            resolve({ dataUrl, removed: false });
+            if (cfg.removeBg && typeof ImageDecoder !== "undefined") {
+              processAnimatedGif(dataUrl).then(resolve, () => resolve({ dataUrl, removed: false, frames: 0 }));
+            } else {
+              resolve({ dataUrl, removed: false, frames: 0 });
+            }
             return;
           }
           const img = new Image();
@@ -575,6 +679,85 @@ window.__ModuleLoader__.load({
           img.onerror = () => resolve({ dataUrl, removed: false });
           img.src = dataUrl;
         });
+      }
+
+      // GIF → 去背景 → 精灵图（横向帧条），保持动画；零依赖（ImageDecoder 解码 + canvas 合成）。
+      async function processAnimatedGif(dataUrl) {
+        const decoded = await decodeGifFrames(dataUrl);
+        const list = decoded.frames;
+        if (!list || list.length <= 1) return { dataUrl, removed: false, frames: 0 };
+        const MAX_FRAMES = 24;
+        const frames = list.slice(0, MAX_FRAMES);
+        const delays = decoded.delays.slice(0, MAX_FRAMES);
+        const MAXD = 256;
+        const s = Math.min(1, MAXD / Math.max(frames[0].width, frames[0].height));
+        const fw = Math.max(1, Math.round(frames[0].width * s));
+        const fh = Math.max(1, Math.round(frames[0].height * s));
+        const tol = Number(cfg.bgTolerance) || 34;
+        const bg = detectBackground(frames[0].getContext("2d").getImageData(0, 0, frames[0].width, frames[0].height).data, frames[0].width, frames[0].height);
+
+        const processed = [];
+        let box = null;
+        for (const fr of frames) {
+          const c = document.createElement("canvas");
+          c.width = fw; c.height = fh;
+          const g = c.getContext("2d", { willReadFrequently: true });
+          g.drawImage(fr, 0, 0, fw, fh);
+          const id = g.getImageData(0, 0, fw, fh);
+          colorKeyRemove(id.data, fw, fh, bg, tol);
+          g.putImageData(id, 0, 0);
+          const b = trimBounds(id.data, fw, fh, 10);
+          if (b && b.w > 2 && b.h > 2) {
+            if (!box) box = Object.assign({}, b);
+            else {
+              const bx = Math.min(box.x, b.x), by = Math.min(box.y, b.y);
+              const bx2 = Math.max(box.x + box.w, b.x + b.w);
+              const by2 = Math.max(box.y + box.h, b.y + b.h);
+              box = { x: bx, y: by, w: bx2 - bx, h: by2 - by };
+            }
+          }
+          processed.push(c);
+        }
+        if (!box || box.w <= 2 || box.h <= 2) return { dataUrl, removed: false, frames: 0 };
+
+        const strip = document.createElement("canvas");
+        strip.width = box.w * processed.length;
+        strip.height = box.h;
+        const sg = strip.getContext("2d");
+        for (let i = 0; i < processed.length; i++) {
+          sg.drawImage(processed[i], box.x, box.y, box.w, box.h, i * box.w, 0, box.w, box.h);
+        }
+        const delay = Math.round(delays.reduce((a, b) => a + b, 0) / Math.max(1, delays.length)) || 100;
+        return { dataUrl: strip.toDataURL("image/png"), removed: true, frames: processed.length, delay, fw: box.w, fh: box.h };
+      }
+
+      // 用 ImageDecoder 解码 GIF 全部帧（按顺序合成完整帧）
+      async function decodeGifFrames(dataUrl) {
+        const res = await fetch(dataUrl);
+        const buf = await res.arrayBuffer();
+        const decoder = new ImageDecoder({ data: buf, type: "image/gif" });
+        await decoder.tracks.ready;
+        const track = decoder.tracks.selectedTrack;
+        const count = track && track.frameCount ? Math.min(track.frameCount, 60) : 1;
+        const frames = [];
+        const delays = [];
+        let w = 0, h = 0;
+        for (let i = 0; i < count; i++) {
+          try {
+            const result = await decoder.decode({ frameIndex: i });
+            const vf = result.image;
+            const dw = vf.displayWidth, dh = vf.displayHeight;
+            if (i === 0) { w = dw; h = dh; }
+            const c = document.createElement("canvas");
+            c.width = w || dw; c.height = h || dh;
+            c.getContext("2d").drawImage(vf, 0, 0);
+            frames.push(c);
+            delays.push(vf.duration ? Math.round(vf.duration / 1000) : 100);
+            try { vf.close(); } catch { /* ignore */ }
+          } catch (e) { break; }
+        }
+        try { decoder.close(); } catch { /* ignore */ }
+        return { frames, delays };
       }
 
       function detectBackground(data, w, h) {
@@ -647,14 +830,17 @@ window.__ModuleLoader__.load({
         reader.onload = async () => {
           const processed = await processPetImage(String(reader.result));
           const id = "custom-" + Date.now();
-          const pets = (cfg.customPets || []).concat([{ id, name: file.name.replace(/\.[^.]+$/, "") || "自定义", dataUrl: processed.dataUrl }]);
+          const pets = (cfg.customPets || []).concat([{
+            id, name: file.name.replace(/\.[^.]+$/, "") || "自定义", dataUrl: processed.dataUrl,
+            frames: processed.frames || 0, delay: processed.delay || 0, fw: processed.fw || 0, fh: processed.fh || 0
+          }]);
           cfg.customPets = pets;
           cfg.petId = id;
           saveConfig();
           store.set({ customPets: pets });
           renderPet();
           applyVisual();
-          say(processed.removed ? "已去背景，换上新形象啦～" : "换上新形象啦～");
+          say(processed.frames > 1 ? "已去背景并保留动画～" : processed.removed ? "已去背景，换上新形象啦～" : "换上新形象啦～");
         };
         reader.readAsDataURL(file);
       }
@@ -682,14 +868,17 @@ window.__ModuleLoader__.load({
           reader.onload = async () => {
             const processed = await processPetImage(String(reader.result));
             const id = "custom-" + Date.now();
-            const pets = (cfg.customPets || []).concat([{ id, name: (nameHint || raw.split("/").pop() || "自定义").replace(/\.[^.]+$/, "").slice(0, 18), dataUrl: processed.dataUrl }]);
+            const pets = (cfg.customPets || []).concat([{
+              id, name: (nameHint || raw.split("/").pop() || "自定义").replace(/\.[^.]+$/, "").slice(0, 18), dataUrl: processed.dataUrl,
+              frames: processed.frames || 0, delay: processed.delay || 0, fw: processed.fw || 0, fh: processed.fh || 0
+            }]);
             cfg.customPets = pets;
             cfg.petId = id;
             saveConfig();
             store.set({ customPets: pets });
             renderPet();
             applyVisual();
-            say(processed.removed ? "已去背景，换上新形象啦～" : "换上新形象啦～");
+            say(processed.frames > 1 ? "已去背景并保留动画～" : processed.removed ? "已去背景，换上新形象啦～" : "换上新形象啦～");
           };
           reader.readAsDataURL(blob);
         } catch (e) {
@@ -702,6 +891,8 @@ window.__ModuleLoader__.load({
         const [snap, setSnap] = React.useState(store.get());
         React.useEffect(() => store.subscribe(setSnap), []);
         const fileRef = React.useRef(null);
+        const soundRef = React.useRef(null);
+        const lineRef = React.useRef(null);
         const builtinKeys = Object.keys(BUILTIN_PETS);
         const custom = snap.customPets || [];
 
@@ -732,6 +923,7 @@ window.__ModuleLoader__.load({
             h("div", { className: "dswp-title" }, "鲸鱼桌宠 · Pet"),
             row("显示桌宠", "独立悬浮，可拖动 / 双击缩放", snap.visible, (e) => applyConfig({ visible: e.target.checked })),
             row("点击说话", "点击冒泡 + 随机台词", snap.talk, (e) => applyConfig({ talk: e.target.checked })),
+            row("跟随鼠标", "桌宠缓慢漂向光标（拖动时暂停）", snap.followMouse, (e) => applyConfig({ followMouse: e.target.checked })),
             h("div", { className: "dswp-row" }, [
               h("span", { className: "dswp-label" }, "大小"),
               h("input", { className: "dswp-slider", type: "range", min: 70, max: 200, step: 5, value: snap.size, onChange: (e) => applyConfig({ size: Number(e.target.value) }) }),
@@ -775,6 +967,52 @@ window.__ModuleLoader__.load({
               }),
               h("button", { className: "dswp-btn", onClick: (e) => { const inp = e.currentTarget.previousSibling; importPetFromUrl(inp && inp.value); if (inp) inp.value = ""; } }, "添加")
             ])
+          ]),
+          h("div", { className: "dswp-card" }, [
+            h("div", { className: "dswp-title" }, "台词与音效 · Lines & Sound"),
+            h("div", { className: "dswp-row" }, [
+              h("input", {
+                ref: lineRef,
+                className: "dswp-url-input",
+                placeholder: "输入一句自定义台词，回车添加",
+                onKeyDown: (e) => {
+                  if (e.key === "Enter" && e.target.value.trim()) {
+                    applyConfig({ customLines: (cfg.customLines || []).concat([e.target.value.trim()]).slice(0, 50) });
+                    e.target.value = "";
+                  }
+                }
+              }),
+              h("button", { className: "dswp-btn", onClick: () => { const inp = lineRef.current; if (inp && inp.value.trim()) { applyConfig({ customLines: (cfg.customLines || []).concat([inp.value.trim()]).slice(0, 50) }); inp.value = ""; } } }, "添加")
+            ]),
+            (snap.customLines || []).length > 0
+              ? h("div", { className: "dswp-row", style: { flexWrap: "wrap", gap: "6px" } },
+                  (snap.customLines || []).map((line, i) => h("button", {
+                    className: "dswp-btn",
+                    title: "点击删除",
+                    onClick: () => applyConfig({ customLines: (cfg.customLines || []).filter((_, j) => j !== i) })
+                  }, line)))
+              : h("div", { className: "dswp-hint" }, "自定义台词会追加到内置台词之后，点击/完成时随机说。"),
+            h("div", { className: "dswp-row" }, [
+              h("input", {
+                ref: soundRef,
+                type: "file",
+                accept: "audio/*",
+                style: { display: "none" },
+                onChange: (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) importSound(f); }
+              }),
+              h("button", { className: "dswp-btn dswp-btn-primary", onClick: () => soundRef.current && soundRef.current.click() }, "导入音效"),
+              h("span", { className: "dswp-hint" }, "MP3/WAV/OGG ≤2MB，最多 5 个；点击桌宠/完成时播放")
+            ]),
+            (snap.customSounds || []).length > 0
+              ? h("div", { className: "dswp-row", style: { flexWrap: "wrap", gap: "6px" } },
+                  (snap.customSounds || []).map((s) => h("div", { key: s.id, className: "dswp-row", style: { gap: "4px" } }, [
+                    h("button", {
+                      className: "dswp-btn" + (snap.activeSoundId === s.id ? " dswp-btn-primary" : ""),
+                      onClick: () => applyConfig({ activeSoundId: s.id })
+                    }, s.name + (snap.activeSoundId === s.id ? " ✓" : "")),
+                    h("button", { className: "dswp-btn", title: "删除", onClick: () => removeSound(s.id) }, "×")
+                  ])))
+              : null
           ])
         ]);
       }

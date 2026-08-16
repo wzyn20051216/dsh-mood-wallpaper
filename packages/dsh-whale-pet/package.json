@@ -1,7 +1,7 @@
 {
   "name": "dsh-whale-pet",
-  "version": "0.4.0",
-  "description": "DSH 自研多形象桌宠 v4.0：内置 5 个原创形象 + 自定义形象上传（自动预处理去背景/裁剪/缩放）+ 图片 URL 添加 + 极简模式临时隐藏 + Scene Studio 场景联动；可拖动、状态联动、点击互动。",
+  "version": "0.5.0",
+  "description": "DSH 自研多形象桌宠 v5.0：内置 5 个原创形象 + 自定义形象上传（去背景 + GIF 保动画转精灵图 + 裁剪缩放）+ 跟随鼠标 + 自定义台词 + 自定义音效 + 图片 URL 添加 + 极简模式 + Scene Studio 联动；可拖动、状态联动、点击互动。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
