@@ -14,7 +14,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $REPO_URL = "https://github.com/wzyn20051216/dsh-mood-wallpaper.git"
-$TMP = Join-Path $env:TEMP "dsh-mood-wallpaper-all"
+# 克隆到持久目录（%TEMP% 可能被系统清理导致 link 失效）
+$TMP = Join-Path $env:USERPROFILE "dsh-mood-wallpaper-all"
 
 Write-Host "=== dsh-mood-wallpaper 全家桶 一键安装 ===" -ForegroundColor Cyan
 
