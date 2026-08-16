@@ -37,9 +37,13 @@
 
 ## 🚀 安装（一条命令）
 
-```bash
-# npm 发布版（推荐）—— 一条命令装到任何人的 DSH
-dsh plugin --profile web add dsh-mood-wallpaper
+```powershell
+# 一键脚本（推荐）：GitHub 直装两个插件（本插件 + dsh-ui-hud），免 npm
+irm https://raw.githubusercontent.com/wzyn20051216/dsh-mood-wallpaper/master/install.ps1 | iex
+
+# 或手动 GitHub 直装（无需 npm）
+dsh plugin --profile web add github:wzyn20051216/dsh-mood-wallpaper
+dsh plugin --profile web add github:wzyn20051216/dsh-ui-hud
 
 # 或本地源码调试（改源码后重启 dsh web 生效）
 dsh plugin --profile web add <本仓库路径>
@@ -51,7 +55,7 @@ dsh plugin --profile web add <本仓库路径>
 dsh plugin --profile web remove dsh-mood-wallpaper
 ```
 
-> DSH 是"一切皆插件"的架构；本插件是标准 `dsh.bundle` + `dsh.client` 双面插件，加载方式与官方 UI 包完全一致。
+> 无需 npm 账号：`github:user/repo` 直装由 pnpm 从 GitHub 拉取，本仓库无构建脚本，一条命令即可装到任何人的 DSH。
 
 ## 📸 截图
 

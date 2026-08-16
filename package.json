@@ -1,7 +1,7 @@
 {
   "name": "dsh-mood-wallpaper",
-  "version": "0.6.0",
-  "description": "DSH 壁纸感知动态壁纸引擎 v6：导入动态壁纸 + 自定义文件夹（非系统盘）+ WebGL 着色器壁纸（含深海）+ 鲸鱼巡游彩蛋；后台分析；状态机 idle/thinking/done + 警报氛围 + token 速率驱动；11 项特效可调。",
+  "version": "0.7.0",
+  "description": "DSH 壁纸感知动态壁纸引擎 v7：场景皮肤（深海鲸语/极光夜航/熔岩引擎/静默极简）、玻璃材质、鲸鱼伙伴化（点击互动）、自定义文件夹壁纸、WebGL 着色器、后台分析、状态机 + 警报氛围 + token 速率驱动。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
@@ -15,6 +15,14 @@
     "assets",
     "cordis.patch.yml"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wzyn20051216/dsh-mood-wallpaper.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wzyn20051216/dsh-mood-wallpaper/issues"
+  },
+  "homepage": "https://github.com/wzyn20051216/dsh-mood-wallpaper#readme",
   "keywords": [
     "deepseek-harness",
     "dsh",
