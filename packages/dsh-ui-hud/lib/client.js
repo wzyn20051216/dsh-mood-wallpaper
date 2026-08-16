@@ -275,11 +275,12 @@ window.__ModuleLoader__.load({
           font-size: 13px; line-height: 20px; transition: border-color 0.15s ease, box-shadow 0.15s ease;
         }
         .dshhud-model-trigger:hover { border-color: var(--dsw-alias-border-l2); }
+        .dshhud-model-trigger:disabled { opacity: 0.5; cursor: default; }
         .dshhud-model-trigger .dshhud-model-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .dshhud-model-trigger .dshhud-model-effort { flex: none; color: var(--dsw-alias-label-caption, #9ca3af); font-size: 11px; }
 
         .dshhud-model-pop {
-          position: absolute; bottom: calc(100% + 8px); left: 0; z-index: 9600; width: 250px;
+          position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 9600; width: 250px;
           padding: 8px; border-radius: 12px;
           background: color-mix(in srgb, var(--dsw-alias-bg-layer-2, #1f222b) 96%, transparent);
           border: 1px solid var(--dsw-alias-border-l1, rgba(255,255,255,0.12));
@@ -1188,7 +1189,8 @@ window.__ModuleLoader__.load({
         ]);
       }
 
-      function ComposerModelControl() {
+      function ComposerModelControl(props) {
+        const locked = !!(props && props.locked);
         const md = ctx.get("modelDirectories");
         const [sid, setSid] = React.useState(currentSid());
         const [dirState, setDirState] = React.useState(null);
@@ -1223,7 +1225,7 @@ window.__ModuleLoader__.load({
         };
 
         return h("div", { className: "dshhud-models" }, [
-          h("button", { className: "dshhud-model-trigger", title: "模型与推理强度", onClick: () => setOpen(!open) }, [
+          h("button", { className: "dshhud-model-trigger", disabled: locked, title: "模型与推理强度", onClick: () => setOpen(!open) }, [
             h("span", { className: "dshhud-model-name" }, model ? model.name : (current && current.model) || "模型"),
             current && current.reasoningEffort
               ? h("span", { className: "dshhud-model-effort" }, ((efforts.find((e) => e.id === current.reasoningEffort) || {}).name) || current.reasoningEffort)
@@ -1245,9 +1247,9 @@ window.__ModuleLoader__.load({
         ]);
       }
 
-      ctx.effect(() => ctx.slots.inject("conversation.input.left", () => ctx.slots.register(
-        { name: "conversation.input.left", id: "ui-hud-model", order: 0, label: "模型与推理强度" },
-        () => h(ComposerModelControl)
+      ctx.effect(() => ctx.slots.inject("conversation.input.model", () => ctx.slots.register(
+        { name: "conversation.input.model", priority: -1 },
+        ComposerModelControl
       )), "dsh-ui-hud: composer model control");
 
       // ================= 启动 =================
