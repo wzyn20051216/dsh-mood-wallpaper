@@ -1,0 +1,7 @@
+# dsh-mood-wallpaper-all 聚合包 patch —— 一条命令激活两个插件。
+# 两个子包作为本包依赖被 pnpm 装入 profile node_modules，这里插入它们的 loader 入口。
+- insert:
+    - id: mood-wallpaper
+      name: 'dsh-mood-wallpaper'
+    - id: ui-hud
+      name: 'dsh-ui-hud'
