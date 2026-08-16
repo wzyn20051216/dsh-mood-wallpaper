@@ -310,6 +310,13 @@ window.__ModuleLoader__.load({
         }
         .dswp-btn-primary { background: var(--dsw-alias-brand-primary); border-color: transparent; color: #fff; }
         .dswp-btn-primary:hover { opacity: 0.9; }
+        .dswp-url-input {
+          box-sizing: border-box; flex: 1; height: 32px; padding: 0 10px;
+          background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary);
+          border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px;
+          font-size: 13px; outline: none; min-width: 0;
+        }
+        .dswp-url-input:focus { border-color: var(--dsw-alias-brand-primary); }
       `;
 
       // ================= 桌宠 DOM =================
@@ -523,6 +530,34 @@ window.__ModuleLoader__.load({
         renderPet();
       }
 
+      // 从 URL 拉取形象（fetch → blob → dataURL；跨域图源会失败，提示改用下载上传）
+      async function importPetFromUrl(url, nameHint) {
+        const raw = String(url || "").trim();
+        if (!/^https?:\/\//i.test(raw)) { say("URL 不对哦～"); return; }
+        try {
+          const res = await fetch(raw, { mode: "cors" });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const blob = await res.blob();
+          if (blob.size > MAX_IMG) { say("图片太大了（≤3MB）～"); return; }
+          if ((cfg.customPets || []).length >= MAX_CUSTOM) { say("自定义形象最多 3 个～"); return; }
+          const reader = new FileReader();
+          reader.onload = () => {
+            const id = "custom-" + Date.now();
+            const pets = (cfg.customPets || []).concat([{ id, name: (nameHint || raw.split("/").pop() || "自定义").replace(/\.[^.]+$/, "").slice(0, 18), dataUrl: String(reader.result) }]);
+            cfg.customPets = pets;
+            cfg.petId = id;
+            saveConfig();
+            store.set({ customPets: pets });
+            renderPet();
+            applyVisual();
+            say("换上新形象啦～");
+          };
+          reader.readAsDataURL(blob);
+        } catch (e) {
+          say("该图源不允许跨域，下载后上传吧～");
+        }
+      }
+
       // ================= 设置页 =================
       function SettingsView() {
         const [snap, setSnap] = React.useState(store.get());
@@ -586,6 +621,14 @@ window.__ModuleLoader__.load({
               }),
               h("button", { className: "dswp-btn dswp-btn-primary", onClick: () => fileRef.current && fileRef.current.click() }, "上传自定义形象"),
               h("span", { className: "dswp-hint" }, "GIF/PNG/WebP ≤3MB，最多 3 个（自己的表情包也能当桌宠）")
+            ]),
+            h("div", { className: "dswp-row" }, [
+              h("input", {
+                className: "dswp-url-input",
+                placeholder: "或粘贴图片 URL（https://…）",
+                onKeyDown: (e) => { if (e.key === "Enter") importPetFromUrl(e.target.value); e.target.value = ""; }
+              }),
+              h("button", { className: "dswp-btn", onClick: (e) => { const inp = e.currentTarget.previousSibling; importPetFromUrl(inp && inp.value); if (inp) inp.value = ""; } }, "添加")
             ])
           ])
         ]);
